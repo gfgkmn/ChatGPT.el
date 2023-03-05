@@ -30,7 +30,7 @@
     ("improve" . "Please improve the following.\n\n%s"))
   "An association list that maps query types to their corresponding format strings."
   :type '(alist :key-type (string :tag "Query Type")
-                :value-type (string :tag "Format String"))
+          :value-type (string :tag "Format String"))
   :group 'chatgpt)
 
 (defcustom chatgpt-enable-loading-ellipsis t
@@ -74,15 +74,18 @@ successful.
 If ChatGPT server is not initialized, 'chatgpt-query' calls this
 function."
   (interactive)
-  (when (equal (shell-command-to-string "pip list | grep chatGPT") "")
-    (shell-command "pip install git+https://github.com/mmabrouk/chatgpt-wrapper")
-    (message "chatgpt-wrapper installed through pip.")
+  (when (equal (shell-command-to-string "pip list | grep revChatGPT") "")
+    (shell-command "pip install revChatGPT")
+    (message "revChatGPT installed through pip.")
     (chatgpt-login))
   (when (null chatgpt-repo-path)
     (error "chatgpt-repo-path is nil. Please set chatgpt-repo-path as specified in joshcho/ChatGPT.el"))
   (setq chatgpt-process (epc:start-epc python-interpreter (list (expand-file-name
                                                                  (format "%schatgpt.py"
-                                                                         chatgpt-repo-path)))))
+                                                                         chatgpt-repo-path))
+                                                                (auth-source-pick-first-password
+                                                                 :host "openai.com"
+                                                                 :user "chatgpt"))))
   (with-current-buffer (get-buffer-create "*ChatGPT*")
     (visual-line-mode 1))
   (message "ChatGPT initialized."))
@@ -228,24 +231,24 @@ users."
     (when chatgpt-display-on-query
       (chatgpt-display))
     (deferred:$
-     (deferred:$
-      (epc:call-deferred chatgpt-process 'query (list query))
-      (eval `(deferred:nextc it
-               (lambda (response)
-                 (chatgpt--stop-wait ,saved-id)
-                 (chatgpt--insert-response response ,saved-id)
-                 (when chatgpt-display-on-response
-                   (chatgpt-display))))))
-     (eval
-      `(deferred:error it
-                       (lambda (err)
-                         (chatgpt--stop-wait ,saved-id)
-                         (string-match "\"Error('\\(.*\\)')\"" (error-message-string err))
-                         (let ((error-str (match-string 1 (error-message-string err))))
-                           (chatgpt--insert-error error-str
-                                                  ,saved-id)
-                           (when (yes-or-no-p (format "Error encountered. Reset chatgpt (If reset doesn't work, try \"\"pkill ms-playwright/firefox\"\" in the shell then reset)?" error-str))
-                             (chatgpt-reset)))))))))
+      (deferred:$
+        (epc:call-deferred chatgpt-process 'query (list query))
+        (eval `(deferred:nextc it
+                 (lambda (response)
+                   (chatgpt--stop-wait ,saved-id)
+                   (chatgpt--insert-response response ,saved-id)
+                   (when chatgpt-display-on-response
+                     (chatgpt-display))))))
+      (eval
+       `(deferred:error it
+          (lambda (err)
+            (chatgpt--stop-wait ,saved-id)
+            (string-match "\"Error('\\(.*\\)')\"" (error-message-string err))
+            (let ((error-str (match-string 1 (error-message-string err))))
+              (chatgpt--insert-error error-str
+                                     ,saved-id)
+              (when (yes-or-no-p (format "Error encountered. Reset chatgpt (If reset doesn't work, try \"\"pkill ms-playwright/firefox\"\" in the shell then reset)?" error-str))
+                (chatgpt-reset)))))))))
 
 (defun chatgpt--query-by-type (query query-type)
   "Query ChatGPT with a given QUERY and QUERY-TYPE.
