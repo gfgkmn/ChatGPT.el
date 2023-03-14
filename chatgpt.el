@@ -293,7 +293,7 @@ returns the response."
     (if (or (assoc query-type chatgpt-query-format-string-map)
             (equal query-type "custom"))
         (chatgpt--query-by-type query query-type)
-      (chatgpt--query (format "%s\n\n%s" query-type query)))))
+      (chatgpt--query (format "%s\n```%s```" query-type query)))))
 
 ;;;###autoload
 (defun chatgpt-query (query)
