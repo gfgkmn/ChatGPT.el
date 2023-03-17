@@ -8,7 +8,7 @@ password = sys.argv[1]
 server = EPCServer(('localhost', 0))
 
 bot = None
-stream_reply = None
+stream_reply = {}
 
 @server.register_function
 def query(query):
@@ -25,16 +25,12 @@ def querystream(query_with_id):
         bot = Chatbot(api_key=password)
 
     query_id, query = query_with_id.split('-', maxsplit=1)
-    if stream_reply is None or stream_reply["query_id"] != query_id:
-        stream_reply = {
-            "query_id": query_id,
-            "query": query,
-            "generator": bot.ask_stream(query)
-        }
+    if query_id not in stream_reply:
+        stream_reply[query_id] = bot.ask_stream(query)
     try:
-        return next(stream_reply['generator'])
+        return next(stream_reply[query_id])
     except StopIteration:
-        stream_reply = None
+        stream_reply.pop(query_id)
         return None
 
 @server.register_function

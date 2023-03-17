@@ -234,8 +234,7 @@ function."
   (with-current-buffer (chatgpt-get-output-buffer-name)
     (save-excursion
       (goto-char (point-max))
-      (insert (format "\n%s\n%s >>> %s\n%s\n%s\n%s"
-                      (make-string (chatgpt-get-buffer-width-by-dash) ?-)
+      (insert (format "\n%s >>> %s\n%s\n%s\n%s"
                       (if (= (point-min) (point))
                           ""
                         "\n\n")
@@ -415,8 +414,8 @@ Supported query types are:
     (chatgpt-init))
   (chatgpt-display)
   (lexical-let ((saved-id (if recursive
-                      chatgpt-id
-                    (cl-incf chatgpt-id)))
+                              chatgpt-id
+                            (cl-incf chatgpt-id)))
                 (query (if recursive
                            (string-join (nthcdr 1 (split-string query "-")) "-")
                          query))
@@ -431,27 +430,31 @@ Supported query types are:
         (chatgpt--insert-query query saved-id)))
 
     (deferred:$
-     (deferred:$
-      (epc:call-deferred chatgpt-process 'querystream (list query_with_id))
-      (deferred:nextc it
-                      #'(lambda (response)
-                          ;; (with-current-buffer (chatgpt-get-filename-buffer)
-                          (with-current-buffer (chatgpt-get-output-buffer-name)
-                            (save-excursion
-                              (if (numberp next-recursive)
-                                  (goto-char next-recursive)
-                                (chatgpt--goto-identifier chatgpt-id))
-                              (if (and (stringp response))
-                                  (progn
-                                    (insert response)
-                                    (chatgpt--query-stream query_with_id (point)))
-                                (progn
-                                  (insert (format "\n\n%s END %s"
-                                                      (make-string 30 ?=)
-                                                      (make-string 30 ?=))))))))))
-     (deferred:error it
-                     `(lambda (err)
-                        (message "err is:%s" err))))))
+      (deferred:$
+        (epc:call-deferred chatgpt-process 'querystream (list query_with_id))
+        (deferred:nextc it
+          #'(lambda (response)
+              ;; (with-current-buffer (chatgpt-get-filename-buffer)
+              (with-current-buffer (chatgpt-get-output-buffer-name)
+                (save-excursion
+                  (if (numberp next-recursive)
+                      (goto-char next-recursive)
+                    (chatgpt--goto-identifier chatgpt-id))
+                  (if (and (stringp response))
+                      (progn
+                        (insert response)
+                        (chatgpt--query-stream query_with_id (point)))
+                    (progn
+                      (insert (format "\n\n%s"
+                                      (make-string (chatgpt-get-buffer-width-by-dash) ?=))))))
+                (let ((output-window (get-buffer-window (current-buffer))))
+                  (when output-window
+                    (with-selected-window output-window
+                      (goto-char (point-max))
+                      (recenter -1))))))))
+      (deferred:error it
+        `(lambda (err)
+           (message "err is:%s" err))))))
 
 (defun chatgpt--query-by-type-stream (query query-type)
   (if (equal query-type "custom")
