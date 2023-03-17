@@ -15,6 +15,8 @@
 (require 'epc)
 (require 'deferred)
 (require 'python)
+(require 'cl)
+
 
 ;;; Code:
 
@@ -108,7 +110,8 @@ function."
                                                                 (auth-source-pick-first-password
                                                                  :host "openai.com"
                                                                  :user "chatgpt"))))
-  (with-current-buffer (chatgpt-get-filename-buffer)
+  ;; (with-current-buffer (chatgpt-get-filename-buffer)
+  (with-current-buffer (chatgpt-get-output-buffer-name)
     (visual-line-mode 1))
   (message "ChatGPT initialized."))
 
@@ -166,20 +169,23 @@ function."
 (defun chatgpt-display ()
   "Displays *ChatGPT*."
   (interactive)
-  (display-buffer (chatgpt-get-output-buffer-name))
-  (when-let ((saved-win (get-buffer-window (current-buffer)))
-             (win (get-buffer-window (chatgpt-get-output-buffer-name))))
-    (unless (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name)))
-      (select-window win)
-      (goto-char (point-max))
-      (unless (pos-visible-in-window-p (point-max) win)
+  (let ((output-buffer (get-buffer-create (chatgpt-get-output-buffer-name)))) ; 创建或获取缓冲区
+  ;; (let ((output-buffer (get-buffer-create (chatgpt-get-filename-buffer)))) ; 创建或获取缓冲区
+    (display-buffer output-buffer) ; 显示缓冲区
+    (when-let ((saved-win (get-buffer-window (current-buffer)))
+               (win (get-buffer-window output-buffer)))
+      (unless (equal (current-buffer) output-buffer)
+        (select-window win)
         (goto-char (point-max))
-        (recenter -1))
-      (select-window saved-win))))
+        (unless (pos-visible-in-window-p (point-max) win)
+          (goto-char (point-max))
+          (recenter -1))
+        (select-window saved-win)))))
 
 (defun chatgpt--clear-line ()
   "Clear line in *ChatGPT*."
   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
+  ;; (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-filename-buffer))))
   (delete-region (save-excursion (beginning-of-line)
                                  (point))
                  (save-excursion (end-of-line)
@@ -193,12 +199,27 @@ function."
   "Regex corresponding to ID."
   (format "cg\\?\\[%s\\]" id))
 
+;; (defun chatgpt--goto-identifier (id)
+;;   "Go to response of ID."
+;;   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
+;;   ;; (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-filename-buffer))))
+;;   (goto-char (point-max))
+;;   (re-search-backward (chatgpt--regex-string id))
+;;   (forward-line))
+
 (defun chatgpt--goto-identifier (id)
   "Go to response of ID."
   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
+  ;; (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-filename-buffer))))
   (goto-char (point-max))
-  (re-search-backward (chatgpt--regex-string id))
-  (forward-line))
+  (let ((regex (chatgpt--regex-string id)))
+    (message "Searching for regex: %s" regex)
+    (if (re-search-backward regex nil t) ; 添加 't' 参数，避免在没有匹配到时抛出错误
+        (progn
+          (message "Found identifier for ID: %d" id)
+          (forward-line))
+      (message "Identifier not found for ID: %d" id))))
+
 
 
 (defun chatgpt-get-buffer-width-by-dash ()
@@ -208,7 +229,8 @@ function."
 
 (defun chatgpt--insert-query (query id)
   "Insert QUERY with ID into *ChatGPT*."
-  (with-current-buffer (chatgpt-get-filename-buffer)
+  ;; (with-current-buffer (chatgpt-get-filename-buffer)
+  (with-current-buffer (chatgpt-get-output-buffer-name)
     (save-excursion
       (goto-char (point-max))
       (insert (format "\n%s\n%s >>> %s\n%s\n%s\n%s"
@@ -227,7 +249,8 @@ function."
 
 (defun chatgpt--insert-response (response id)
   "Insert RESPONSE into *ChatGPT* for ID."
-  (with-current-buffer (chatgpt-get-filename-buffer)
+  ;; (with-current-buffer (chatgpt-get-filename-buffer)
+    (with-current-buffer (chatgpt-get-output-buffer-name)
     (save-excursion
       (chatgpt--goto-identifier id)
       (chatgpt--clear-line)
@@ -282,6 +305,9 @@ response.
 This function is intended to be called internally by the
 `chatgpt-query' function, and should not be called directly by
 users."
+  (print "-------")
+  (print chatgpt-id)
+  (print "-------")
   (unless chatgpt-process
     (chatgpt-init))
   (let ((saved-id (cl-incf chatgpt-id)))
@@ -387,14 +413,15 @@ Supported query types are:
   (unless chatgpt-process
     (chatgpt-init))
   (chatgpt-display)
-  (let ((next-query query)
-        (saved-id (if recursive
+  (let ((saved-id (if (boundp 'recursive)
                       chatgpt-id
-                    (cl-incf chatgpt-id)))
-        (next-recursive recursive))
+                    (cl-incf chatgpt-id))))
 
-    (if (not recursive)
-        (chatgpt--insert-query query saved-id))
+    (if (boundp 'recursive)
+        (setq next-recursive recursive)
+      (progn
+        (setq next-recursive nil)
+        (chatgpt--insert-query query saved-id)))
 
     (deferred:$
      (deferred:$
@@ -411,7 +438,7 @@ Supported query types are:
                               (if (and (stringp response))
                                   (progn
                                     (insert response)
-                                    (chatgpt--query-stream next-query (point)))
+                                    (chatgpt--query-stream query (point)))
                                 (progn
                                   (insert (format "\n\n%s END %s"
                                                       (make-string 30 ?=)
