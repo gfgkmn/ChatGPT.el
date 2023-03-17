@@ -23,6 +23,11 @@
   :prefix "chatgpt-"
   :group 'ai)
 
+(defcustom chatgpt-buffer-name "*ChatGPT*"
+  "Chatgpt buffer name"
+  :type 'string
+  :group 'chatgpt)
+
 (defcustom chatgpt-query-format-string-map
   '(("doc" . "Please write the documentation for the following function.\n\n%s")
     ("bug" . "There is a bug in the following function, please help me fix it.\n\n%s")
@@ -62,6 +67,23 @@
   (interactive)
   (shell-command "chatgpt install &"))
 
+
+(defun chatgpt-get-filename-buffer ()
+  (or (and chatgpt-record-path
+           (find-file-noselect (format "%s/gptchat_record_%s.txt"
+                                       chatgpt-record-path
+                                       (chatgpt-get-current-date-string))))
+      (get-buffer-create chatgpt-buffer-name)))
+
+(defun chatgpt-get-output-buffer-name ()
+  (or (and chatgpt-record-path (buffer-name
+                                (find-file-noselect (format "%s/gptchat_record_%s.txt"
+                                                            chatgpt-record-path
+                                                            (chatgpt-get-current-date-string)))))
+      chatgpt-buffer-name))
+
+(defvar chatgpt-finish-response-hook nil)
+
 ;;;###autoload
 (defun chatgpt-init ()
   "Initialize the ChatGPT server.
@@ -86,12 +108,42 @@ function."
                                                                 (auth-source-pick-first-password
                                                                  :host "openai.com"
                                                                  :user "chatgpt"))))
-  (with-current-buffer (get-buffer-create "*ChatGPT*")
+  (with-current-buffer (chatgpt-get-filename-buffer)
     (visual-line-mode 1))
   (message "ChatGPT initialized."))
 
 (defvar chatgpt-wait-timers (make-hash-table)
   "Timers to update the waiting message in the ChatGPT buffer.")
+
+
+(defun chatgpt-get-current-date-string ()
+  "Return the current date string in the format year_month_weekofyear_day."
+  (let* ((now (current-time))
+         (year (format-time-string "%Y" now))
+         (week (format-time-string "%U" now)))
+    (concat year "_week" week)))
+
+(defun chatgpt-write-string-to-file (filename string)
+  "Write STRING to FILENAME, creating the file if it doesn't exist, and appending to it if it does."
+  (with-temp-buffer
+    (insert string)
+    (when (file-exists-p filename)
+      (append-to-file (point-min) (point-max) filename))
+    (unless (file-exists-p filename)
+      (write-region (point-min) (point-max) filename))))
+
+(defcustom chatgpt-record-path nil
+  "The path of ChatGPT.el repository."
+  :type 'string
+  :group 'chatgpt)
+
+
+(defun chatgpt-append-gptchat-record (recordstr &optional record_path)
+  (and chatgpt-record-path (chatgpt-write-string-to-file
+                            (format "%s/gptchat_record_%s.txt"
+                                    (or record_path chatgpt-record-path )
+                                    (chatgpt-get-current-date-string))
+                            (concat "\n\n" (make-string 80 ?-) "\n\n"  recordstr))))
 
 ;;;###autoload
 (defun chatgpt-stop ()
@@ -114,20 +166,20 @@ function."
 (defun chatgpt-display ()
   "Displays *ChatGPT*."
   (interactive)
-  (display-buffer "*ChatGPT*")
+  (display-buffer (chatgpt-get-output-buffer-name))
   (when-let ((saved-win (get-buffer-window (current-buffer)))
-             (win (get-buffer-window "*ChatGPT*")))
-    (unless (equal (current-buffer) (get-buffer "*ChatGPT*"))
+             (win (get-buffer-window (chatgpt-get-output-buffer-name))))
+    (unless (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name)))
       (select-window win)
       (goto-char (point-max))
       (unless (pos-visible-in-window-p (point-max) win)
         (goto-char (point-max))
-        (recenter))
+        (recenter -1))
       (select-window saved-win))))
 
 (defun chatgpt--clear-line ()
   "Clear line in *ChatGPT*."
-  (cl-assert (equal (current-buffer) (get-buffer "*ChatGPT*")))
+  (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
   (delete-region (save-excursion (beginning-of-line)
                                  (point))
                  (save-excursion (end-of-line)
@@ -143,20 +195,20 @@ function."
 
 (defun chatgpt--goto-identifier (id)
   "Go to response of ID."
-  (cl-assert (equal (current-buffer) (get-buffer "*ChatGPT*")))
-  (goto-char (point-min))
-  (re-search-forward (chatgpt--regex-string id))
+  (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
+  (goto-char (point-max))
+  (re-search-backward (chatgpt--regex-string id))
   (forward-line))
+
 
 (defun chatgpt-get-buffer-width-by-dash ()
   "Return the width of the currently focused window in terms of the number of DASH-WIDTH - characters that can fit in the window."
-  (let* ((selected-window (frame-selected-window))
-         (pixel-width (window-pixel-width selected-window)))
-    (floor (- (/ pixel-width (window-font-width selected-window)) 1))))
+  (let ((dash-width 1)) ; adjust this value if necessary for different font sizes
+    (- (/ (window-width) dash-width) 1)))
 
 (defun chatgpt--insert-query (query id)
   "Insert QUERY with ID into *ChatGPT*."
-  (with-current-buffer (get-buffer-create "*ChatGPT*")
+  (with-current-buffer (chatgpt-get-filename-buffer)
     (save-excursion
       (goto-char (point-max))
       (insert (format "\n%s\n%s >>> %s\n%s\n%s\n%s"
@@ -175,7 +227,7 @@ function."
 
 (defun chatgpt--insert-response (response id)
   "Insert RESPONSE into *ChatGPT* for ID."
-  (with-current-buffer (get-buffer-create "*ChatGPT*")
+  (with-current-buffer (chatgpt-get-filename-buffer)
     (save-excursion
       (chatgpt--goto-identifier id)
       (chatgpt--clear-line)
@@ -183,7 +235,7 @@ function."
 
 (defun chatgpt--insert-error (error-msg id)
   "Insert ERROR-MSG into *ChatGPT* for ID."
-  (with-current-buffer (get-buffer-create "*ChatGPT*")
+  (with-current-buffer (chatgpt-get-filename-buffer)
     (save-excursion
       (chatgpt--goto-identifier id)
       (chatgpt--clear-line)
@@ -196,7 +248,7 @@ function."
            (run-with-timer 0.5 0.5
                            (eval
                             `(lambda ()
-                               (with-current-buffer (get-buffer-create "*ChatGPT*")
+                               (with-current-buffer (chatgpt-get-filename-buffer)
                                  (save-excursion
                                    (chatgpt--goto-identifier ,id)
                                    (let ((line (thing-at-point 'line)))
@@ -246,7 +298,8 @@ users."
                    (chatgpt--stop-wait ,saved-id)
                    (chatgpt--insert-response response ,saved-id)
                    (when chatgpt-display-on-response
-                     (chatgpt-display))))))
+                     (chatgpt-display)
+                   (and chatgpt-finish-response-hook (run-hooks 'chatgpt-finish-response-hook)))))))
       (eval
        `(deferred:error it
           (lambda (err)
@@ -328,6 +381,71 @@ Supported query types are:
   (if (region-active-p)
       (chatgpt-query-by-type query)
     (chatgpt--query query)))
+
+
+(defun chatgpt--query-stream (query &optional recursive)
+  (unless chatgpt-process
+    (chatgpt-init))
+  (chatgpt-display)
+  (let ((next-query query)
+        (saved-id (if recursive
+                      chatgpt-id
+                    (cl-incf chatgpt-id)))
+        (next-recursive recursive))
+
+    (if (not recursive)
+        (chatgpt--insert-query query saved-id))
+
+    (deferred:$
+     (deferred:$
+      (epc:call-deferred chatgpt-process 'querystream (list query))
+      (deferred:nextc it
+                      #'(lambda (response)
+                          (with-current-buffer (chatgpt-get-filename-buffer)
+                            (save-excursion
+                              (if (numberp next-recursive)
+                                  (goto-char next-recursive)
+                                (progn
+                                  (chatgpt--goto-identifier chatgpt-id)
+                                  (chatgpt--clear-line)))
+                              (if (and (stringp response))
+                                  (progn
+                                    (insert response)
+                                    (chatgpt--query-stream next-query (point)))
+                                (progn
+                                  (insert (format "\n\n%s END %s"
+                                                      (make-string 30 ?=)
+                                                      (make-string 30 ?=))))))))))
+     (deferred:error it
+                     `(lambda (err)
+                        (message "err is:%s" err))))))
+
+(defun chatgpt--query-by-type-stream (query query-type)
+  (if (equal query-type "custom")
+      (chatgpt--query
+       (format "%s\n\n%s" (read-from-minibuffer "ChatGPT Custom Prompt: ") query))
+    (if-let (format-string (cdr (assoc query-type chatgpt-query-format-string-map)))
+        (chatgpt--query-stream
+         (format format-string query))
+      (error "No format string associated with 'query-type' %s. Please customize 'chatgpt-query-format-string-map'" query-type))))
+
+(defun chatgpt-query-by-type-stream (query)
+  (interactive (list (if (region-active-p)
+                         (buffer-substring-no-properties (region-beginning) (region-end))
+                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+  (let* ((query-type (completing-read "Type of Stream Query: " (cons "custom" (mapcar #'car chatgpt-query-format-string-map)))))
+    (if (or (assoc query-type chatgpt-query-format-string-map)
+            (equal query-type "custom"))
+        (chatgpt--query-by-type-stream query query-type)
+      (chatgpt--query-stream (format "%s\n\n%s" query-type query)))))
+
+(defun chatgpt-query-stream (query)
+  (interactive (list (if (region-active-p)
+                         (buffer-substring-no-properties (region-beginning) (region-end))
+                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+  (if (region-active-p)
+      (chatgpt-query-by-type-stream query)
+    (chatgpt--query-stream query)))
 
 (provide 'chatgpt)
 ;;; chatgpt.el ends here
