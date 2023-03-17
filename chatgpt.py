@@ -18,18 +18,21 @@ def query(query):
     return bot.ask(query)
 
 @server.register_function
-def querystream(query):
+def querystream(query_with_id):
     global bot
     global stream_reply
     if bot == None:
         bot = Chatbot(api_key=password)
-    if stream_reply is None or stream_reply["query"] != query:
+
+    query_id, query = query_with_id.split('-', maxsplit=1)
+    if stream_reply is None or stream_reply["query_id"] != query_id:
         stream_reply = {
+            "query_id": query_id,
             "query": query,
             "generator": bot.ask_stream(query)
         }
     try:
-        return next(bot.ask_stream(query))
+        return next(stream_reply['generator'])
     except StopIteration:
         stream_reply = None
         return None

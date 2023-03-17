@@ -16,6 +16,7 @@
 (require 'deferred)
 (require 'python)
 (require 'cl)
+(require 'org-id)
 
 
 ;;; Code:
@@ -79,10 +80,10 @@
 
 (defun chatgpt-get-output-buffer-name ()
   (or (and chatgpt-record-path (buffer-name
-                                (find-file-noselect (format "%s/gptchat_record_%s.txt"
-                                                            chatgpt-record-path
-                                                            (chatgpt-get-current-date-string)))))
-      chatgpt-buffer-name))
+            (find-file-noselect (format "%s/gptchat_record_%s.txt"
+                                        chatgpt-record-path
+                                        (chatgpt-get-current-date-string)))))
+      (get-buffer-create chatgpt-buffer-name)))
 
 (defvar chatgpt-finish-response-hook nil)
 
@@ -169,7 +170,7 @@ function."
 (defun chatgpt-display ()
   "Displays *ChatGPT*."
   (interactive)
-  (let ((output-buffer (get-buffer-create (chatgpt-get-output-buffer-name)))) ; 创建或获取缓冲区
+  (let ((output-buffer (chatgpt-get-output-buffer-name))) ; 创建或获取缓冲区
   ;; (let ((output-buffer (get-buffer-create (chatgpt-get-filename-buffer)))) ; 创建或获取缓冲区
     (display-buffer output-buffer) ; 显示缓冲区
     (when-let ((saved-win (get-buffer-window (current-buffer)))
@@ -258,7 +259,8 @@ function."
 
 (defun chatgpt--insert-error (error-msg id)
   "Insert ERROR-MSG into *ChatGPT* for ID."
-  (with-current-buffer (chatgpt-get-filename-buffer)
+  ;; (with-current-buffer (chatgpt-get-filename-buffer)
+  (with-current-buffer (chatgpt-get-output-buffer-name)
     (save-excursion
       (chatgpt--goto-identifier id)
       (chatgpt--clear-line)
@@ -271,7 +273,8 @@ function."
            (run-with-timer 0.5 0.5
                            (eval
                             `(lambda ()
-                               (with-current-buffer (chatgpt-get-filename-buffer)
+                               ;; (with-current-buffer (chatgpt-get-filename-buffer)
+                               (with-current-buffer (chatgpt-get-output-buffer-name)
                                  (save-excursion
                                    (chatgpt--goto-identifier ,id)
                                    (let ((line (thing-at-point 'line)))
@@ -305,9 +308,6 @@ response.
 This function is intended to be called internally by the
 `chatgpt-query' function, and should not be called directly by
 users."
-  (print "-------")
-  (print chatgpt-id)
-  (print "-------")
   (unless chatgpt-process
     (chatgpt-init))
   (let ((saved-id (cl-incf chatgpt-id)))
@@ -316,6 +316,7 @@ users."
       (chatgpt--add-timer saved-id))
     (when chatgpt-display-on-query
       (chatgpt-display))
+    (print saved-id)
     (deferred:$
       (deferred:$
         (epc:call-deferred chatgpt-process 'query (list query))
@@ -413,11 +414,17 @@ Supported query types are:
   (unless chatgpt-process
     (chatgpt-init))
   (chatgpt-display)
-  (let ((saved-id (if (boundp 'recursive)
+  (lexical-let ((saved-id (if recursive
                       chatgpt-id
-                    (cl-incf chatgpt-id))))
+                    (cl-incf chatgpt-id)))
+                (query (if recursive
+                           (string-join (nthcdr 1 (split-string query "-")) "-")
+                         query))
+                (query_with_id (if recursive
+                                   query
+                                 (format "%s-%s" (org-id-uuid) query))))
 
-    (if (boundp 'recursive)
+    (if recursive
         (setq next-recursive recursive)
       (progn
         (setq next-recursive nil)
@@ -425,20 +432,19 @@ Supported query types are:
 
     (deferred:$
      (deferred:$
-      (epc:call-deferred chatgpt-process 'querystream (list query))
+      (epc:call-deferred chatgpt-process 'querystream (list query_with_id))
       (deferred:nextc it
                       #'(lambda (response)
-                          (with-current-buffer (chatgpt-get-filename-buffer)
+                          ;; (with-current-buffer (chatgpt-get-filename-buffer)
+                          (with-current-buffer (chatgpt-get-output-buffer-name)
                             (save-excursion
                               (if (numberp next-recursive)
                                   (goto-char next-recursive)
-                                (progn
-                                  (chatgpt--goto-identifier chatgpt-id)
-                                  (chatgpt--clear-line)))
+                                (chatgpt--goto-identifier chatgpt-id))
                               (if (and (stringp response))
                                   (progn
                                     (insert response)
-                                    (chatgpt--query-stream query (point)))
+                                    (chatgpt--query-stream query_with_id (point)))
                                 (progn
                                   (insert (format "\n\n%s END %s"
                                                       (make-string 30 ?=)
