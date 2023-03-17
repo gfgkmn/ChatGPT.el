@@ -26,11 +26,6 @@
   :prefix "chatgpt-"
   :group 'ai)
 
-(defcustom chatgpt-buffer-name "*ChatGPT*"
-  "Chatgpt buffer name"
-  :type 'string
-  :group 'chatgpt)
-
 (defcustom chatgpt-query-format-string-map
   '(("doc" . "Please write the documentation for the following function.\n\n%s")
     ("bug" . "There is a bug in the following function, please help me fix it.\n\n%s")
@@ -64,19 +59,29 @@
 (defvar chatgpt-process nil
   "The ChatGPT process.")
 
+(defcustom chatgpt-buffer-name "*ChatGPT*"
+  "Chatgpt buffer name"
+  :type 'string
+  :group 'chatgpt)
+
 ;;;###autoload
 (defun chatgpt-login ()
   "Log in to ChatGPT."
   (interactive)
   (shell-command "chatgpt install &"))
 
+;; TODO: save chatgpt conversation to file
+(defcustom chatgpt-record-path nil
+  "The path of ChatGPT.el repository."
+  :type 'string
+  :group 'chatgpt)
 
-(defun chatgpt-get-filename-buffer ()
-  (or (and chatgpt-record-path
-           (find-file-noselect (format "%s/gptchat_record_%s.txt"
-                                       chatgpt-record-path
-                                       (chatgpt-get-current-date-string))))
-      (get-buffer-create chatgpt-buffer-name)))
+(defun chatgpt-get-current-date-string ()
+  "Return the current date string in the format year_month_weekofyear_day."
+  (let* ((now (current-time))
+         (year (format-time-string "%Y" now))
+         (week (format-time-string "%U" now)))
+    (concat year "_week" week)))
 
 (defun chatgpt-get-output-buffer-name ()
   (or (and chatgpt-record-path (buffer-name
@@ -111,7 +116,6 @@ function."
                                                                 (auth-source-pick-first-password
                                                                  :host "openai.com"
                                                                  :user "chatgpt"))))
-  ;; (with-current-buffer (chatgpt-get-filename-buffer)
   (with-current-buffer (chatgpt-get-output-buffer-name)
     (visual-line-mode 1))
   (message "ChatGPT initialized."))
@@ -120,12 +124,14 @@ function."
   "Timers to update the waiting message in the ChatGPT buffer.")
 
 
-(defun chatgpt-get-current-date-string ()
-  "Return the current date string in the format year_month_weekofyear_day."
-  (let* ((now (current-time))
-         (year (format-time-string "%Y" now))
-         (week (format-time-string "%U" now)))
-    (concat year "_week" week)))
+(defun chatgpt-converstaion-log-path ()
+  (let* ((monthly-folder-name (format "%s/%s" chatgpt-record-path
+                                      (format-time-string "%Y-%m"
+                                                          (time-subtract (current-time) (seconds-to-time (* 3 60 60)))))))
+    (unless (file-directory-p monthly-folder-name)
+      (make-directory monthly-folder-name t))
+    (format "%s/chatgpt_record_%s.txt" monthly-folder-name (chatgpt-get-current-date-string))))
+
 
 (defun chatgpt-write-string-to-file (filename string)
   "Write STRING to FILENAME, creating the file if it doesn't exist, and appending to it if it does."
@@ -135,11 +141,6 @@ function."
       (append-to-file (point-min) (point-max) filename))
     (unless (file-exists-p filename)
       (write-region (point-min) (point-max) filename))))
-
-(defcustom chatgpt-record-path nil
-  "The path of ChatGPT.el repository."
-  :type 'string
-  :group 'chatgpt)
 
 
 (defun chatgpt-append-gptchat-record (recordstr &optional record_path)
@@ -171,7 +172,6 @@ function."
   "Displays *ChatGPT*."
   (interactive)
   (let ((output-buffer (chatgpt-get-output-buffer-name))) ; 创建或获取缓冲区
-  ;; (let ((output-buffer (get-buffer-create (chatgpt-get-filename-buffer)))) ; 创建或获取缓冲区
     (display-buffer output-buffer) ; 显示缓冲区
     (when-let ((saved-win (get-buffer-window (current-buffer)))
                (win (get-buffer-window output-buffer)))
@@ -186,7 +186,6 @@ function."
 (defun chatgpt--clear-line ()
   "Clear line in *ChatGPT*."
   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
-  ;; (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-filename-buffer))))
   (delete-region (save-excursion (beginning-of-line)
                                  (point))
                  (save-excursion (end-of-line)
@@ -203,7 +202,6 @@ function."
 ;; (defun chatgpt--goto-identifier (id)
 ;;   "Go to response of ID."
 ;;   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
-;;   ;; (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-filename-buffer))))
 ;;   (goto-char (point-max))
 ;;   (re-search-backward (chatgpt--regex-string id))
 ;;   (forward-line))
@@ -211,7 +209,6 @@ function."
 (defun chatgpt--goto-identifier (id)
   "Go to response of ID."
   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
-  ;; (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-filename-buffer))))
   (goto-char (point-max))
   (let ((regex (chatgpt--regex-string id)))
     (message "Searching for regex: %s" regex)
@@ -230,7 +227,6 @@ function."
 
 (defun chatgpt--insert-query (query id)
   "Insert QUERY with ID into *ChatGPT*."
-  ;; (with-current-buffer (chatgpt-get-filename-buffer)
   (with-current-buffer (chatgpt-get-output-buffer-name)
     (save-excursion
       (goto-char (point-max))
@@ -249,7 +245,6 @@ function."
 
 (defun chatgpt--insert-response (response id)
   "Insert RESPONSE into *ChatGPT* for ID."
-  ;; (with-current-buffer (chatgpt-get-filename-buffer)
     (with-current-buffer (chatgpt-get-output-buffer-name)
     (save-excursion
       (chatgpt--goto-identifier id)
@@ -258,7 +253,6 @@ function."
 
 (defun chatgpt--insert-error (error-msg id)
   "Insert ERROR-MSG into *ChatGPT* for ID."
-  ;; (with-current-buffer (chatgpt-get-filename-buffer)
   (with-current-buffer (chatgpt-get-output-buffer-name)
     (save-excursion
       (chatgpt--goto-identifier id)
@@ -272,7 +266,6 @@ function."
            (run-with-timer 0.5 0.5
                            (eval
                             `(lambda ()
-                               ;; (with-current-buffer (chatgpt-get-filename-buffer)
                                (with-current-buffer (chatgpt-get-output-buffer-name)
                                  (save-excursion
                                    (chatgpt--goto-identifier ,id)
@@ -434,7 +427,6 @@ Supported query types are:
         (epc:call-deferred chatgpt-process 'querystream (list query_with_id))
         (deferred:nextc it
           #'(lambda (response)
-              ;; (with-current-buffer (chatgpt-get-filename-buffer)
               (with-current-buffer (chatgpt-get-output-buffer-name)
                 (save-excursion
                   (if (numberp next-recursive)
