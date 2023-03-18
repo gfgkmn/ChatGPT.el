@@ -448,6 +448,7 @@ Supported query types are:
         `(lambda (err)
            (message "err is:%s" err))))))
 
+;;;###autoload
 (defun chatgpt--query-by-type-stream (query query-type)
   (if (equal query-type "custom")
       (chatgpt--query
@@ -467,6 +468,7 @@ Supported query types are:
         (chatgpt--query-by-type-stream query query-type)
       (chatgpt--query-stream (format "%s\n\n%s" query-type query)))))
 
+;;;###autoload
 (defun chatgpt-query-stream (query)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
