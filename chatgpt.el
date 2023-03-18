@@ -199,26 +199,24 @@ function."
   "Regex corresponding to ID."
   (format "cg\\?\\[%s\\]" id))
 
-;; (defun chatgpt--goto-identifier (id)
-;;   "Go to response of ID."
-;;   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
-;;   (goto-char (point-max))
-;;   (re-search-backward (chatgpt--regex-string id))
-;;   (forward-line))
-
 (defun chatgpt--goto-identifier (id)
   "Go to response of ID."
   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
   (goto-char (point-max))
-  (let ((regex (chatgpt--regex-string id)))
-    (message "Searching for regex: %s" regex)
-    (if (re-search-backward regex nil t) ; 添加 't' 参数，避免在没有匹配到时抛出错误
-        (progn
-          (message "Found identifier for ID: %d" id)
-          (forward-line))
-      (message "Identifier not found for ID: %d" id))))
+  (re-search-backward (chatgpt--regex-string id))
+  (forward-line))
 
-
+;; (defun chatgpt--goto-identifier (id)
+;;   "Go to response of ID."
+;;   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
+;;   (goto-char (point-max))
+;;   (let ((regex (chatgpt--regex-string id)))
+;;     (message "Searching for regex: %s" regex)
+;;     (if (re-search-backward regex nil t) ; 添加 't' 参数，避免在没有匹配到时抛出错误
+;;         (progn
+;;           (message "Found identifier for ID: %d" id)
+;;           (forward-line))
+;;       (message "Identifier not found for ID: %d" id))))
 
 (defun chatgpt-get-buffer-width-by-dash ()
   "Return the width of the currently focused window in terms of the number of DASH-WIDTH - characters that can fit in the window."
