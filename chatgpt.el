@@ -85,10 +85,11 @@
 
 (defun chatgpt-get-output-buffer-name ()
   (or (and chatgpt-record-path (buffer-name
-            (find-file-noselect (format "%s/gptchat_record_%s.txt"
-                                        chatgpt-record-path
-                                        (chatgpt-get-current-date-string)))))
-      (get-buffer-create chatgpt-buffer-name)))
+                                (find-file-noselect (format "%s/gptchat_record_%s.txt"
+                                                            chatgpt-record-path
+                                                            (chatgpt-get-current-date-string)))))
+      (with-current-buffer (get-buffer-create chatgpt-buffer-name)
+        (setq-local truncate-lines nil))))
 
 (defvar chatgpt-finish-response-hook nil)
 
