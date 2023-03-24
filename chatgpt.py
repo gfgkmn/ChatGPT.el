@@ -15,7 +15,7 @@ def query(query):
     global bot
     if bot == None:
         bot = Chatbot(api_key=password)
-    return bot.ask(query)
+    return bot.ask(query, temperature=0.7, top_p=0.9)
 
 @server.register_function
 def querystream(query_with_id):
@@ -26,7 +26,7 @@ def querystream(query_with_id):
 
     query_id, query = query_with_id.split('-', maxsplit=1)
     if query_id not in stream_reply:
-        stream_reply[query_id] = bot.ask_stream(query)
+        stream_reply[query_id] = bot.ask_stream(query, temperature=0.7, top_p=0.9)
     try:
         return next(stream_reply[query_id])
     except StopIteration:

@@ -7,20 +7,22 @@
 
 ** News
 
-OpenAI just released its [[https://openai.com/blog/introducing-chatgpt-and-whisper-apis][ChatGPT API]]. ChatGPT.el will incorporate this API soon, stay tuned.
+Compare with [[https://github.com/joshcho/ChatGPT.el.git][joshcho/ChatGPT.el]], this repo support stream reply, and make the output more pretty, the repo is inspiration by [[https://github.com/carlos-wong/ChatGPT.el.git][carlos-wong/ChatGPT.el]]
+I add chatgpt-query-stream and chatgpt-query-by-type-stream, and change the default python dependency into revChatGPT to use the official API.
 
 ** Installation
 *** Dependency
 #+begin_src shell
 pip install sexpdata==0.0.3
 pip install epc
-pip install git+https://github.com/mmabrouk/chatgpt-wrapper
-chatgpt install
+pip install revChatGPT=4.0.8
 #+end_src
 
-This will prompt you to log in with your browser.
-
-NOTE: If you encounter any problems, please submit an issue or see [[https://github.com/mmabrouk/chatgpt-wrapper][chatgpt-wrapper]].
+*** OpenAI key
+you should store your openai's key into ~/.authinfo.gpg in this format:
+#+begin_src conf
+machine openai.com login chatgpt password sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#+end_src
 
 *** [[https://github.com/radian-software/straight.el][Straight]]
 #+begin_src emacs-lisp
@@ -83,7 +85,7 @@ In ~config.el~ ,
   (setq chatgpt-repo-path (expand-file-name "straight/repos/ChatGPT.el/" doom-local-dir))
   (set-popup-rule! (regexp-quote "*ChatGPT*")
     :side 'bottom :size .5 :ttl nil :quit t :modeline nil)
-  :bind ("C-c q" . chatgpt-query))
+  :bind ("C-c q" . chatgpt-query-stream))
 #+end_src
 
 ** Usage
