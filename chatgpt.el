@@ -89,7 +89,8 @@
                                                             chatgpt-record-path
                                                             (chatgpt-get-current-date-string)))))
       (with-current-buffer (get-buffer-create chatgpt-buffer-name)
-        (setq-local truncate-lines nil))))
+        (setq-local truncate-lines nil))
+      (get-buffer-create chatgpt-buffer-name)))
 
 (defvar chatgpt-finish-response-hook nil)
 
