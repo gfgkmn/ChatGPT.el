@@ -7,8 +7,7 @@
 
 ** News
 
-Compare with [[https://github.com/joshcho/ChatGPT.el.git][joshcho/ChatGPT.el]], this repo support stream reply, and make the output more pretty, the repo is inspiration by [[https://github.com/carlos-wong/ChatGPT.el.git][carlos-wong/ChatGPT.el]]
-I add chatgpt-query-stream and chatgpt-query-by-type-stream, and change the default python dependency into revChatGPT to use the official API.
+Compared to  [[https://github.com/joshcho/ChatGPT.el.git][joshcho/ChatGPT.el]], this repository offers support for stream replies and presents the output in a more visually appealing manner. It drew inspiration from  [[https://github.com/carlos-wong/ChatGPT.el.git][carlos-wong/ChatGPT.el]]. I added two new functions, chatgpt-query-stream and chatgpt-query-by-type-stream, and also changed the default Python dependency to revChatGPT in order to use the official API.
 
 ** Installation
 *** Dependency
@@ -19,7 +18,7 @@ pip install revChatGPT=4.0.8
 #+end_src
 
 *** OpenAI key
-you should store your openai's key into ~/.authinfo.gpg in this format:
+To store your OpenAI key, you should follow this format and save it in the ~/.authinfo.gpg file.
 #+begin_src conf
 machine openai.com login chatgpt password sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 #+end_src
