@@ -220,10 +220,16 @@ function."
 ;;           (forward-line))
 ;;       (message "Identifier not found for ID: %d" id))))
 
-(defun chatgpt-get-buffer-width-by-dash ()
-  "Return the width of the currently focused window in terms of the number of DASH-WIDTH - characters that can fit in the window."
-  (let ((dash-width 1)) ; adjust this value if necessary for different font sizes
-    (- (/ (window-width) dash-width) 1)))
+(defun chatgpt-get-buffer-width-by-char (char)
+  "Return the width of the currently focused window in terms of the number of CHAR characters that can fit in the window."
+  (let* ((c-width (if (eq char ?=)
+                      2
+                    1))
+         (window (selected-window))
+         (line-num-width (if (and (boundp 'display-line-numbers)
+                                  (not (eq display-line-numbers nil)))
+                             (length (format-mode-line "%l")) 0)))
+    (- (/ (- (window-text-width window) (* line-num-width 1)) 1) c-width)))
 
 (defun chatgpt--insert-query (query id)
   "Insert QUERY with ID into *ChatGPT*."
@@ -235,7 +241,7 @@ function."
                           ""
                         "\n\n")
                       (propertize query 'face 'bold)
-                      (make-string (chatgpt-get-buffer-width-by-dash) ?-)
+                      (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
                       (propertize
                        (chatgpt--identifier-string id)
                        'invisible t)
@@ -438,7 +444,7 @@ Supported query types are:
                         (chatgpt--query-stream query_with_id (point)))
                     (progn
                       (insert (format "\n\n%s"
-                                      (make-string (chatgpt-get-buffer-width-by-dash) ?=))))))
+                                      (make-string (chatgpt-get-buffer-width-by-char ?=) ?=))))))
                 (let ((output-window (get-buffer-window (current-buffer))))
                   (when output-window
                     (with-selected-window output-window
