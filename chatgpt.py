@@ -4,6 +4,7 @@ from revChatGPT.V3 import Chatbot
 import sys
 
 password = sys.argv[1]
+gptmmodel = sys.argv[2]
 
 server = EPCServer(('localhost', 0))
 
@@ -14,7 +15,7 @@ stream_reply = {}
 def query(query):
     global bot
     if bot == None:
-        bot = Chatbot(api_key=password)
+        bot = Chatbot(api_key=password, engine=gptmmodel)
     return bot.ask(query, temperature=0.7, top_p=0.9)
 
 @server.register_function
@@ -22,7 +23,7 @@ def querystream(query_with_id):
     global bot
     global stream_reply
     if bot == None:
-        bot = Chatbot(api_key=password)
+        bot = Chatbot(api_key=password, engine=gptmmodel)
 
     query_id, query = query_with_id.split('-', maxsplit=1)
     if query_id not in stream_reply:
@@ -37,7 +38,7 @@ def querystream(query_with_id):
 def switch_to_chat(chat_uuid):
     global bot
     if bot == None:
-        bot = Chatbot(api_key=password)
+        bot = Chatbot(api_key=password, engine=gptmmodel)
     bot.conversation_id = chat_uuid
     return ""
 

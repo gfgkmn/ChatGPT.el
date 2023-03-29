@@ -46,6 +46,11 @@
   :type 'boolean
   :group 'chatgpt)
 
+(defcustom chatgpt-use-model "gpt-3.5-turbo"
+  "The model to use for ChatGPT."
+  :type 'string
+  :group 'chatgpt)
+
 (defcustom chatgpt-display-on-response t
   "Whether *ChatGPT* is displayed when a response is received."
   :type 'boolean
@@ -117,7 +122,8 @@ function."
                                                                          chatgpt-repo-path))
                                                                 (auth-source-pick-first-password
                                                                  :host "openai.com"
-                                                                 :user "chatgpt"))))
+                                                                 :user "chatgpt")
+                                                                chatgpt-use-model)))
   (with-current-buffer (chatgpt-get-output-buffer-name)
     (visual-line-mode 1))
   (message "ChatGPT initialized."))
