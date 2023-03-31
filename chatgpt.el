@@ -125,7 +125,8 @@ function."
                                                                  :user "chatgpt")
                                                                 chatgpt-use-model)))
   (with-current-buffer (chatgpt-get-output-buffer-name)
-    (visual-line-mode 1))
+    (visual-line-mode 1)
+    (markdown-mode))
   (message "ChatGPT initialized."))
 
 (defvar chatgpt-wait-timers (make-hash-table)
