@@ -81,18 +81,21 @@
   :type 'string
   :group 'chatgpt)
 
-(defun chatgpt-get-current-date-string ()
-  "Return the current date string in the format year_month_weekofyear_day."
+(defun chatgpt-save-file-name ()
+  "Return the current workspace name."
+  (interactive)
   (let* ((now (current-time))
          (year (format-time-string "%Y" now))
          (week (format-time-string "%U" now)))
-    (concat year "_week" week)))
+    (concat year "_week" week (if persp-mode
+                                  (safe-persp-name (get-current-persp))
+                                "default"))))
 
 (defun chatgpt-get-output-buffer-name ()
   (or (and chatgpt-record-path (buffer-name
                                 (find-file-noselect (format "%s/gptchat_record_%s.txt"
                                                             chatgpt-record-path
-                                                            (chatgpt-get-current-date-string)))))
+                                                            (chatgpt-save-file-name)))))
       (with-current-buffer (get-buffer-create chatgpt-buffer-name)
         (setq-local truncate-lines nil))
       (get-buffer-create chatgpt-buffer-name)))
@@ -131,33 +134,6 @@ function."
 
 (defvar chatgpt-wait-timers (make-hash-table)
   "Timers to update the waiting message in the ChatGPT buffer.")
-
-
-(defun chatgpt-converstaion-log-path ()
-  (let* ((monthly-folder-name (format "%s/%s" chatgpt-record-path
-                                      (format-time-string "%Y-%m"
-                                                          (time-subtract (current-time) (seconds-to-time (* 3 60 60)))))))
-    (unless (file-directory-p monthly-folder-name)
-      (make-directory monthly-folder-name t))
-    (format "%s/chatgpt_record_%s.txt" monthly-folder-name (chatgpt-get-current-date-string))))
-
-
-(defun chatgpt-write-string-to-file (filename string)
-  "Write STRING to FILENAME, creating the file if it doesn't exist, and appending to it if it does."
-  (with-temp-buffer
-    (insert string)
-    (when (file-exists-p filename)
-      (append-to-file (point-min) (point-max) filename))
-    (unless (file-exists-p filename)
-      (write-region (point-min) (point-max) filename))))
-
-
-(defun chatgpt-append-gptchat-record (recordstr &optional record_path)
-  (and chatgpt-record-path (chatgpt-write-string-to-file
-                            (format "%s/gptchat_record_%s.txt"
-                                    (or record_path chatgpt-record-path )
-                                    (chatgpt-get-current-date-string))
-                            (concat "\n\n" (make-string 80 ?-) "\n\n"  recordstr))))
 
 ;;;###autoload
 (defun chatgpt-stop ()
@@ -262,7 +238,10 @@ function."
     (save-excursion
       (chatgpt--goto-identifier id)
       (chatgpt--clear-line)
-      (insert response))))
+      (insert response)
+      (progn
+        (insert (format "\n\n%s"
+                        (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))))))
 
 (defun chatgpt--insert-error (error-msg id)
   "Insert ERROR-MSG into *ChatGPT* for ID."
@@ -316,11 +295,11 @@ users."
   (unless chatgpt-process
     (chatgpt-init))
   (let ((saved-id (cl-incf chatgpt-id)))
-    (chatgpt--insert-query query saved-id)
     (when chatgpt-enable-loading-ellipsis
       (chatgpt--add-timer saved-id))
     (when chatgpt-display-on-query
       (chatgpt-display))
+    (chatgpt--insert-query query saved-id)
     (print saved-id)
     (deferred:$
       (deferred:$
