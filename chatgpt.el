@@ -235,7 +235,7 @@ function."
          (line-num-width (if (and (boundp 'display-line-numbers)
                                   (not (eq display-line-numbers nil)))
                              (length (format-mode-line "%l")) 0)))
-    (- (/ (- (window-text-width window) (* line-num-width 1)) 1) c-width)))
+    (- (/ (- (window-text-width window) (* line-num-width 1)) 1) (1+ c-width))))
 
 (defun chatgpt--insert-query (query id)
   "Insert QUERY with ID into *ChatGPT*."
