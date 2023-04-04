@@ -46,11 +46,6 @@
   :type 'boolean
   :group 'chatgpt)
 
-(defcustom chatgpt-use-model "gpt-3.5-turbo"
-  "The model to use for ChatGPT."
-  :type 'string
-  :group 'chatgpt)
-
 (defcustom chatgpt-display-on-response t
   "Whether *ChatGPT* is displayed when a response is received."
   :type 'boolean
@@ -125,8 +120,7 @@ function."
                                                                          chatgpt-repo-path))
                                                                 (auth-source-pick-first-password
                                                                  :host "openai.com"
-                                                                 :user "chatgpt")
-                                                                chatgpt-use-model)))
+                                                                 :user "chatgpt"))))
   (with-current-buffer (chatgpt-get-output-buffer-name)
     (visual-line-mode 1)
     (markdown-mode))
@@ -280,7 +274,7 @@ function."
 (defvar chatgpt-id 0
   "Tracks responses in the background.")
 
-(defun chatgpt--query (query)
+(defun chatgpt--query (query use-model)
   "Send QUERY to the ChatGPT process.
 
 The query is inserted into the *ChatGPT* buffer with bold text,
@@ -303,7 +297,7 @@ users."
     (print saved-id)
     (deferred:$
       (deferred:$
-        (epc:call-deferred chatgpt-process 'query (list query))
+        (epc:call-deferred chatgpt-process 'query (list query use-model))
         (eval `(deferred:nextc it
                  (lambda (response)
                    (chatgpt--stop-wait ,saved-id)
@@ -322,7 +316,7 @@ users."
               (when (yes-or-no-p (format "Error encountered. Reset chatgpt (If reset doesn't work, try \"\"pkill ms-playwright/firefox\"\" in the shell then reset)?" error-str))
                 (chatgpt-reset)))))))))
 
-(defun chatgpt--query-by-type (query query-type)
+(defun chatgpt--query-by-type (query query-type use-model)
   "Query ChatGPT with a given QUERY and QUERY-TYPE.
 
 QUERY is the text to be passed to ChatGPT.
@@ -343,58 +337,14 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 \(defun square (x) (* x x))\""
   (if (equal query-type "custom")
       (chatgpt--query
-       (format "%s\n\n%s" (read-from-minibuffer "ChatGPT Custom Prompt: ") query))
+       (format "%s\n\n%s" (read-from-minibuffer "ChatGPT Custom Prompt: ") query) use-model)
     (if-let (format-string (cdr (assoc query-type chatgpt-query-format-string-map)))
         (chatgpt--query
-         (format format-string query))
+         (format format-string query) use-model)
       (error "No format string associated with 'query-type' %s. Please customize 'chatgpt-query-format-string-map'" query-type))))
 
-;;;###autoload
-(defun chatgpt-query-by-type (query)
-  "Query ChatGPT with from QUERY and interactively chosen 'query-type'.
 
-The function uses the 'completing-read' function to prompt the
-user to select the type of query to use. The selected query type
-is passed to the 'chatgpt--query-by-type' function along with the
-'query' argument, which sends the query to the ChatGPT model and
-returns the response."
-  (interactive (list (if (region-active-p)
-                         (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Query: "))))
-  (let* ((query-type (completing-read "Type of Query: " (cons "custom" (mapcar #'car chatgpt-query-format-string-map)))))
-    (if (or (assoc query-type chatgpt-query-format-string-map)
-            (equal query-type "custom"))
-        (chatgpt--query-by-type query query-type)
-      (chatgpt--query (format "%s\n```%s```" query-type query)))))
-
-;;;###autoload
-(defun chatgpt-query (query)
-  "Query ChatGPT with QUERY.
-
-The user will be prompted to enter a query if none is provided. If
-there is an active region, the user will be prompted to select the
-type of query to perform.
-
-Supported query types are:
-
-* doc: Ask for documentation in query
-* bug: Find bug in query
-* improve: Suggestions for improving code
-* understand: Query for understanding code or behavior"
-  (interactive (list (if (region-active-p)
-                         (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Query: "))))
-  ;; (if chatgpt-waiting-dot-timer
-  ;;     (message "Already waiting on a ChatGPT query. If there was an error with your previous query, try M-x chatgpt-reset")
-  ;;   (if (region-active-p)
-  ;;       (chatgpt-query-by-type query)
-  ;;     (chatgpt--query query)))
-  (if (region-active-p)
-      (chatgpt-query-by-type query)
-    (chatgpt--query query)))
-
-
-(defun chatgpt--query-stream (query &optional recursive)
+(defun chatgpt--query-stream (query use-model &optional recursive)
   (unless chatgpt-process
     (chatgpt-init))
   (chatgpt-display)
@@ -416,7 +366,7 @@ Supported query types are:
 
     (deferred:$
       (deferred:$
-        (epc:call-deferred chatgpt-process 'querystream (list query_with_id))
+        (epc:call-deferred chatgpt-process 'querystream (list query_with_id use-model))
         (deferred:nextc it
           #'(lambda (response)
               (with-current-buffer (chatgpt-get-output-buffer-name)
@@ -427,7 +377,7 @@ Supported query types are:
                   (if (and (stringp response))
                       (progn
                         (insert response)
-                        (chatgpt--query-stream query_with_id (point)))
+                        (chatgpt--query-stream query_with_id use-model (point)))
                     (progn
                       (insert (format "\n\n%s"
                                       (make-string (chatgpt-get-buffer-width-by-char ?=) ?=))))))
@@ -440,34 +390,84 @@ Supported query types are:
         `(lambda (err)
            (message "err is:%s" err))))))
 
-;;;###autoload
-(defun chatgpt--query-by-type-stream (query query-type)
+
+(defun chatgpt--query-by-type-stream (query query-type use-model)
   (if (equal query-type "custom")
-      (chatgpt--query
-       (format "%s\n\n%s" (read-from-minibuffer "ChatGPT Custom Prompt: ") query))
+      (chatgpt--query-stream
+       (format "%s\n\n%s" (read-from-minibuffer "ChatGPT Custom Prompt: ") query) use-model)
     (if-let (format-string (cdr (assoc query-type chatgpt-query-format-string-map)))
         (chatgpt--query-stream
-         (format format-string query))
+         (format format-string query) use-model)
       (error "No format string associated with 'query-type' %s. Please customize 'chatgpt-query-format-string-map'" query-type))))
 
-(defun chatgpt-query-by-type-stream (query)
+
+;;;###autoload
+(defun chatgpt-query-by-type (query use-model)
+  "Query ChatGPT with from QUERY and interactively chosen 'query-type'.
+
+The function uses the 'completing-read' function to prompt the
+user to select the type of query to use. The selected query type
+is passed to the 'chatgpt--query-by-type' function along with the
+'query' argument, which sends the query to the ChatGPT model and
+returns the response."
+  ; TODO
+  (interactive (list (if (region-active-p)
+                         (buffer-substring-no-properties (region-beginning) (region-end))
+                       (read-from-minibuffer "ChatGPT Query: "))))
+  (let* ((query-type (completing-read "Type of Query: " (cons "custom" (mapcar #'car chatgpt-query-format-string-map)))))
+    (if (or (assoc query-type chatgpt-query-format-string-map)
+            (equal query-type "custom"))
+        (chatgpt--query-by-type query query-type use-model)
+      (chatgpt--query (format "%s\n```%s```" query-type query) use-model))))
+
+;;;###autoload
+(defun chatgpt-query (query use-model)
+  "Query ChatGPT with QUERY.
+
+The user will be prompted to enter a query if none is provided. If
+there is an active region, the user will be prompted to select the
+type of query to perform.
+
+Supported query types are:
+
+* doc: Ask for documentation in query
+* bug: Find bug in query
+* improve: Suggestions for improving code
+* understand: Query for understanding code or behavior"
+  ;TODO
+  (interactive (list (if (region-active-p)
+                         (buffer-substring-no-properties (region-beginning) (region-end))
+                       (read-from-minibuffer "ChatGPT Query: "))))
+  ;; (if chatgpt-waiting-dot-timer
+  ;;     (message "Already waiting on a ChatGPT query. If there was an error with your previous query, try M-x chatgpt-reset")
+  ;;   (if (region-active-p)
+  ;;       (chatgpt-query-by-type query)
+  ;;     (chatgpt--query query)))
+  (if (region-active-p)
+      (chatgpt-query-by-type query use-model)
+    (chatgpt--query query use-model)))
+
+;;;###autoload
+(defun chatgpt-query-by-type-stream (query use-model)
+  ; TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
   (let* ((query-type (completing-read "Type of Stream Query: " (cons "custom" (mapcar #'car chatgpt-query-format-string-map)))))
     (if (or (assoc query-type chatgpt-query-format-string-map)
             (equal query-type "custom"))
-        (chatgpt--query-by-type-stream query query-type)
+        (chatgpt--query-by-type-stream query query-type use-model)
       (chatgpt--query-stream (format "%s\n\n%s" query-type query)))))
 
 ;;;###autoload
-(defun chatgpt-query-stream (query)
+(defun chatgpt-query-stream (query use-model)
+  ; TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
   (if (region-active-p)
-      (chatgpt-query-by-type-stream query)
-    (chatgpt--query-stream query)))
+      (chatgpt-query-by-type-stream query use-model)
+    (chatgpt--query-stream query use-model)))
 
 (provide 'chatgpt)
 ;;; chatgpt.el ends here

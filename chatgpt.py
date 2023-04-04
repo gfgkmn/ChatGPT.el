@@ -4,30 +4,30 @@ from revChatGPT.V3 import Chatbot
 import sys
 
 password = sys.argv[1]
-gptmmodel = sys.argv[2]
 
 server = EPCServer(('localhost', 0))
 
-bot = None
+bots = {"gpt-3.5-turbo": None, "gpt-4": None}
 stream_reply = {}
 
 @server.register_function
-def query(query):
-    global bot
-    if bot == None:
-        bot = Chatbot(api_key=password, engine=gptmmodel)
-    return bot.ask(query, temperature=0.7, top_p=0.9)
+def query(query, gptmodel):
+    global bots
+    if bots[gptmodel] == None:
+        bots[gptmodel] = Chatbot(api_key=password, engine=gptmodel)
+    return bots[gptmodel].ask(query, temperature=0.7, top_p=0.9)
 
 @server.register_function
-def querystream(query_with_id):
-    global bot
+def querystream(query_with_id, gptmodel):
+    global bots
     global stream_reply
-    if bot == None:
-        bot = Chatbot(api_key=password, engine=gptmmodel)
+
+    if bots[gptmodel] == None:
+        bots[gptmodel] = Chatbot(api_key=password, engine=gptmodel)
 
     query_id, query = query_with_id.split('-', maxsplit=1)
     if query_id not in stream_reply:
-        stream_reply[query_id] = bot.ask_stream(query, temperature=0.7, top_p=0.9)
+        stream_reply[query_id] = bots[gptmodel].ask_stream(query, temperature=0.7, top_p=0.9)
     try:
         return next(stream_reply[query_id])
     except StopIteration:
@@ -38,7 +38,7 @@ def querystream(query_with_id):
 def switch_to_chat(chat_uuid):
     global bot
     if bot == None:
-        bot = Chatbot(api_key=password, engine=gptmmodel)
+        bot = Chatbot(api_key=password, engine=gptmodel)
     bot.conversation_id = chat_uuid
     return ""
 
