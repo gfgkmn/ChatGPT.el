@@ -1,3 +1,4 @@
+;;; ;; -- lexical-binding: t --
 ;;; chatgpt.el --- ChatGPT in Emacs
 
 ;; Copyright (C) 2011 Free Software Foundation, Inc.
