@@ -64,6 +64,11 @@
   :type 'string
   :group 'chatgpt)
 
+(defcustom chatgpt-default-model "gpt-3.5-turbo"
+  "The model to use for ChatGPT."
+  :type 'string
+  :group 'chatgpt)
+
 ;;;###autoload
 (defun chatgpt-login ()
   "Log in to ChatGPT."
@@ -413,7 +418,8 @@ returns the response."
   ; TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Query: "))))
+                       (read-from-minibuffer "ChatGPT Query: "))
+                     (read-string "GPT model: " chatgpt-default-model)))
   (let* ((query-type (completing-read "Type of Query: " (cons "custom" (mapcar #'car chatgpt-query-format-string-map)))))
     (if (or (assoc query-type chatgpt-query-format-string-map)
             (equal query-type "custom"))
@@ -437,7 +443,8 @@ Supported query types are:
   ;TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Query: "))))
+                       (read-from-minibuffer "ChatGPT Query: "))
+                     (read-string "GPT model: " chatgpt-default-model)))
   ;; (if chatgpt-waiting-dot-timer
   ;;     (message "Already waiting on a ChatGPT query. If there was an error with your previous query, try M-x chatgpt-reset")
   ;;   (if (region-active-p)
@@ -449,25 +456,40 @@ Supported query types are:
 
 ;;;###autoload
 (defun chatgpt-query-by-type-stream (query use-model)
-  ; TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+                       (read-from-minibuffer "ChatGPT Stream Query: "))
+                     (read-string "GPT model: " chatgpt-default-model)))
   (let* ((query-type (completing-read "Type of Stream Query: " (cons "custom" (mapcar #'car chatgpt-query-format-string-map)))))
     (if (or (assoc query-type chatgpt-query-format-string-map)
             (equal query-type "custom"))
-        (chatgpt--query-by-type-stream query query-type use-model)
-      (chatgpt--query-stream (format "%s\n\n%s" query-type query)))))
+        (chatgpt--query-by-type-stream query query-type (or use-model chatgpt-default-model))
+      (chatgpt--query-stream (format "%s\n\n%s" query-type query) (or use-model chatgpt-default-model)))))
 
 ;;;###autoload
 (defun chatgpt-query-stream (query use-model)
-  ; TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+                       (read-from-minibuffer "ChatGPT Stream Query: "))
+                     (read-string "GPT model: " chatgpt-default-model)))
   (if (region-active-p)
       (chatgpt-query-by-type-stream query use-model)
     (chatgpt--query-stream query use-model)))
+
+
+;;;###autoload
+(defun chatgpt-query-stream-gpt4 (query)
+  (interactive (list (if (region-active-p)
+                         (buffer-substring-no-properties (region-beginning) (region-end))
+                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+  (chatgpt-query-stream query "gpt-4"))
+
+;;;###autoload
+(defun chatgpt-query-stream-gpt35 (query)
+  (interactive (list (if (region-active-p)
+                         (buffer-substring-no-properties (region-beginning) (region-end))
+                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+  (chatgpt-query-stream query "gpt-3.5-turbo"))
 
 (provide 'chatgpt)
 ;;; chatgpt.el ends here
