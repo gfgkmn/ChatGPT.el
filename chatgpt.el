@@ -396,54 +396,6 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         `(lambda (err)
            (message "err is:%s" err))))))
 
-(defun chatgpt--query-stream (query use-model)
-  (unless chatgpt-process
-    (chatgpt-init))
-  (chatgpt-display)
-  (lexical-let ((saved-id (if recursive
-                              chatgpt-id
-                            (cl-incf chatgpt-id)))
-                (query (if recursive
-                           (string-join (nthcdr 1 (split-string query "-")) "-")
-                         query))
-                (query_with_id (if recursive
-                                   query
-                                 (format "%s-%s" (org-id-uuid) query)))
-                (recursive-model use-model))
-
-    (if recursive
-        (setq next-recursive recursive)
-      (progn
-        (setq next-recursive nil)
-        (chatgpt--insert-query query saved-id)))
-
-    (deferred:$
-      (deferred:$
-        (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model))
-        (deferred:nextc it
-          #'(lambda (response)
-              (with-current-buffer (chatgpt-get-output-buffer-name)
-                (save-excursion
-                  (if (numberp next-recursive)
-                      (goto-char next-recursive)
-                    (chatgpt--goto-identifier chatgpt-id))
-                  (if (and (stringp response))
-                      (progn
-                        (insert response)
-                        (chatgpt--query-stream query_with_id recursive-model (point)))
-                    (progn
-                      (insert (format "\n\n%s"
-                                      (make-string (chatgpt-get-buffer-width-by-char ?=) ?=))))))
-                (let ((output-window (get-buffer-window (current-buffer))))
-                  (when output-window
-                    (with-selected-window output-window
-                      (goto-char (point-max))
-                      (recenter -1))))))))
-      (deferred:error it
-        `(lambda (err)
-           (message "err is:%s" err))))))
-
-
 
 (defun chatgpt--query-by-type-stream (query query-type use-model)
   (if (equal query-type "custom")
