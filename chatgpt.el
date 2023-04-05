@@ -9,7 +9,6 @@
 ;; URL: https://github.com/joshcho/ChatGPT.el
 
 ;;; Commentary:
-
 ;; This package provides an interactive interface with ChatGPT API.
 
 (require 'epc)
@@ -361,7 +360,8 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                          query))
                 (query_with_id (if recursive
                                    query
-                                 (format "%s-%s" (org-id-uuid) query))))
+                                 (format "%s-%s" (org-id-uuid) query)))
+                (recursive-model use-model))
 
     (if recursive
         (setq next-recursive recursive)
@@ -371,7 +371,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 
     (deferred:$
       (deferred:$
-        (epc:call-deferred chatgpt-process 'querystream (list query_with_id use-model))
+        (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model))
         (deferred:nextc it
           #'(lambda (response)
               (with-current-buffer (chatgpt-get-output-buffer-name)
@@ -382,7 +382,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                   (if (and (stringp response))
                       (progn
                         (insert response)
-                        (chatgpt--query-stream query_with_id use-model (point)))
+                        (chatgpt--query-stream query_with_id recursive-model (point)))
                     (progn
                       (insert (format "\n\n%s"
                                       (make-string (chatgpt-get-buffer-width-by-char ?=) ?=))))))
@@ -471,7 +471,7 @@ Supported query types are:
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))
-                     (read-string "GPT model: " chatgpt-default-model)))
+                     (unless use-model (read-string "GPT model: " chatgpt-default-model))))
   (if (region-active-p)
       (chatgpt-query-by-type-stream query use-model)
     (chatgpt--query-stream query use-model)))

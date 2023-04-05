@@ -35,11 +35,11 @@ def querystream(query_with_id, gptmodel):
         return None
 
 @server.register_function
-def switch_to_chat(chat_uuid):
-    global bot
-    if bot == None:
-        bot = Chatbot(api_key=password, engine=gptmodel)
-    bot.conversation_id = chat_uuid
+def switch_to_chat(chat_uuid, gptmodel):
+    global bots
+    if bots[gptmodel] == None:
+        bots[gptmodel] = Chatbot(api_key=password, engine=gptmodel)
+    bots[gptmodel].conversation_id = chat_uuid
     return ""
 
 server.print_port()
