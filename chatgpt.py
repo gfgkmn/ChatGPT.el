@@ -7,7 +7,7 @@ password = sys.argv[1]
 
 server = EPCServer(('localhost', 0))
 
-bots_profile = {
+bots = {
     "ellis": {
         "born_setting": {
             "engine": "gpt-3.5-turbo",
