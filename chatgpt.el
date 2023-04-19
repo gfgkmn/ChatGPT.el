@@ -161,6 +161,8 @@ function."
                (win (get-buffer-window output-buffer)))
       (unless (equal (current-buffer) output-buffer)
         (select-window win)
+        (if (not (eq major-mode 'markdown-mode))
+            (markdown-mode))
         (goto-char (point-max))
         (unless (pos-visible-in-window-p (point-max) win)
           (goto-char (point-max))
