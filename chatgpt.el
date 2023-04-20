@@ -359,7 +359,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                               chatgpt-id
                             (cl-incf chatgpt-id)))
                 (query (if recursive
-                           (string-join (nthcdr 1 (split-string query "-")) "-")
+                           (string-join (nthcdr 4 (split-string query "-")) "-")
                          query))
                 (query_with_id (if recursive
                                    query
