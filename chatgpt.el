@@ -385,15 +385,20 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                   (if (and (stringp response))
                       (progn
                         (insert response)
-                        (chatgpt--query-stream query_with_id recursive-model (point)))
+                        (goto-char (point-max))
+                        (setq next-recursive (point)))
                     (progn
                       (insert (format "\n\n%s"
-                                      (make-string (chatgpt-get-buffer-width-by-char ?=) ?=))))))
-                (let ((output-window (get-buffer-window (current-buffer))))
-                  (when output-window
-                    (with-selected-window output-window
+                                      (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
                       (goto-char (point-max))
-                      (recenter -1))))))))
+                      (let ((output-window (get-buffer-window (current-buffer))))
+                        (when output-window
+                          (with-selected-window output-window
+                            (goto-char (point-max))
+                            (recenter -1))))
+                      (setq next-recursive nil)))))
+              (if next-recursive
+                  (chatgpt--query-stream query_with_id recursive-model next-recursive)))))
       (deferred:error it
         `(lambda (err)
            (message "err is:%s" err))))))
