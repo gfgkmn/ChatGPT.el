@@ -51,7 +51,9 @@ def querystream(query_with_id, botname):
     if bots[botname]["identity"] == None:
         bots[botname]["identity"] = Chatbot(api_key=password, **bots[botname]["born_setting"])
 
-    query_id, query = query_with_id.split('-', maxsplit=1)
+    query_with_id = query_with_id.split('-', maxsplit=5)
+    query = query_with_id[5]
+    query_with_id = '-'.join(query_with_id[:5])
     if query_id not in stream_reply:
         stream_reply[query_id] = bots[botname]["identity"].ask_stream(query, **bots[botname]["gen_setting"])
     try:
