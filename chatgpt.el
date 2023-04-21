@@ -217,21 +217,25 @@ function."
 
 (defun chatgpt--insert-query (query id)
   "Insert QUERY with ID into *ChatGPT*."
-  (with-current-buffer (chatgpt-get-output-buffer-name)
-    (save-excursion
-      (goto-char (point-max))
-      (insert (format "\n%s >>> %s\n%s\n%s\n%s"
-                      (if (= (point-min) (point))
-                          ""
-                        "\n\n")
-                      (propertize query 'face 'bold)
-                      (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
-                      (propertize
-                       (chatgpt--identifier-string id)
-                       'invisible t)
-                      (if chatgpt-enable-loading-ellipsis
-                          ""
-                        (concat "Waiting for ChatGPT...")))))))
+  (let ((output-buffer (chatgpt-get-output-buffer-name)))
+    (with-current-buffer output-buffer
+      (save-excursion
+        (goto-char (point-max))
+        (with-selected-window (get-buffer-window output-buffer)
+          (recenter 0))
+        (let ((inhibit-read-only t))
+          (insert (format "\n%s >>> %s\n%s\n%s\n%s"
+                          (if (= (point-min) (point))
+                              ""
+                            "\n\n")
+                          (propertize query 'face 'bold)
+                          (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
+                          (propertize
+                           (chatgpt--identifier-string id)
+                           'invisible t)
+                          (if chatgpt-enable-loading-ellipsis
+                              ""
+                            (concat "Waiting for ChatGPT...")))))))))
 
 (defun chatgpt--insert-response (response id)
   "Insert RESPONSE into *ChatGPT* for ID."
@@ -395,7 +399,8 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                         (when output-window
                           (with-selected-window output-window
                             (goto-char (point-max))
-                            (recenter -1))))
+                            (unless (>= (window-end output-window) (point-max))
+                              (recenter -1)))))
                       (setq next-recursive nil)))))
               (if next-recursive
                   (chatgpt--query-stream query_with_id recursive-model next-recursive)))))
