@@ -224,9 +224,9 @@ function."
         (with-selected-window (get-buffer-window output-buffer)
           (recenter 0))
         (let ((inhibit-read-only t))
-          (insert (format "\n%s >>> %s\n%s\n%s\n%s"
+          (insert (format "%s >>> %s\n%s\n%s\n%s"
                           (if (= (point-min) (point))
-                              ""
+                              "\n"
                             "\n\n")
                           (propertize query 'face 'bold)
                           (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
