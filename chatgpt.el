@@ -152,24 +152,28 @@ function."
   (chatgpt-init))
 
 ;;;###autoload
-(defun chatgpt-display ()
+(defun chatgpt-display (&optional output-buffer)
   "Displays *ChatGPT*."
   (interactive)
-  (let ((output-buffer (chatgpt-get-output-buffer-name))) ; 创建或获取缓冲区
-    (display-buffer output-buffer) ; 显示缓冲区
-    (when-let ((saved-win (get-buffer-window (current-buffer)))
-               (win (get-buffer-window output-buffer)))
-      (unless (equal (current-buffer) output-buffer)
-        (select-window win)
-        (if (not (eq major-mode 'markdown-mode))
-            (markdown-mode))
-        (goto-char (point-max))
-        (unless (pos-visible-in-window-p (point-max) win)
-          (goto-char (point-max))
-          (recenter -1))
-        (select-window saved-win)))))
 
-(defun chatgpt--clear-line ()
+  (unless output-buffer
+    (setq output-buffer (chatgpt-get-output-buffer-name))
+    (display-buffer output-buffer)) ; 创建或获取缓冲区
+   ; 显示缓冲区
+  (when-let ((saved-win (get-buffer-window (current-buffer)))
+             (win (get-buffer-window output-buffer)))
+    (unless (equal (current-buffer) output-buffer)
+      (select-window win)
+      (if (not (eq major-mode 'markdown-mode))
+          (markdown-mode))
+      (goto-char (point-max))
+      (unless (pos-visible-in-window-p (point-max) win)
+        (goto-char (point-max))
+        (recenter -1))
+      (select-window saved-win)))
+  (get-buffer output-buffer))
+
+(Defun chatgpt--clear-line ()
   "Clear line in *ChatGPT*."
   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
   (delete-region (save-excursion (beginning-of-line)
@@ -185,9 +189,11 @@ function."
   "Regex corresponding to ID."
   (format "cg\\?\\[%s\\]" id))
 
-(defun chatgpt--goto-identifier (id)
+(defun chatgpt--goto-identifier (id &optional output-buffer)
   "Go to response of ID."
-  (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
+  (unless output-buffer
+    (setq output-buffer (get-buffer (chatgpt-get-output-buffer-name))))
+  (cl-assert (equal (current-buffer) output-buffer))
   (goto-char (point-max))
   (re-search-backward (chatgpt--regex-string id))
   (forward-line))
@@ -215,27 +221,28 @@ function."
                              (length (format-mode-line "%l")) 0)))
     (- (/ (- (window-text-width window) (* line-num-width 2)) 1) (+ c-width 2))))
 
-(defun chatgpt--insert-query (query id)
+(defun chatgpt--insert-query (query id &optional output-buffer)
   "Insert QUERY with ID into *ChatGPT*."
-  (let ((output-buffer (chatgpt-get-output-buffer-name)))
-    (with-current-buffer output-buffer
-      (save-excursion
-        (goto-char (point-max))
-        (with-selected-window (get-buffer-window output-buffer)
-          (recenter 0))
-        (let ((inhibit-read-only t))
-          (insert (format "%s >>> %s\n%s\n%s\n%s"
-                          (if (= (point-min) (point))
-                              "\n"
-                            "\n\n")
-                          (propertize query 'face 'bold)
-                          (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
-                          (propertize
-                           (chatgpt--identifier-string id)
-                           'invisible t)
-                          (if chatgpt-enable-loading-ellipsis
-                              ""
-                            (concat "Waiting for ChatGPT...")))))))))
+  (unless output-buffer
+    (setq output-buffer (chatgpt-get-output-buffer-name))) ; 创建或获取缓冲区
+  (with-current-buffer output-buffer
+    (save-excursion
+      (goto-char (point-max))
+      (with-selected-window (get-buffer-window output-buffer)
+        (recenter 0))
+      (let ((inhibit-read-only t))
+        (insert (format "%s >>> %s\n%s\n%s\n%s"
+                        (if (= (point-min) (point))
+                            "\n"
+                          "\n\n")
+                        (propertize query 'face 'bold)
+                        (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
+                        (propertize
+                         (chatgpt--identifier-string id)
+                         'invisible t)
+                        (if chatgpt-enable-loading-ellipsis
+                            ""
+                          (concat "Waiting for ChatGPT..."))))))))
 
 (defun chatgpt--insert-response (response id)
   "Insert RESPONSE into *ChatGPT* for ID."
@@ -355,10 +362,12 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
       (error "No format string associated with 'query-type' %s. Please customize 'chatgpt-query-format-string-map'" query-type))))
 
 
-(defun chatgpt--query-stream (query use-model &optional recursive)
+(defun chatgpt--query-stream (query use-model &optional recursive use-buffer-name)
   (unless chatgpt-process
     (chatgpt-init))
-  (chatgpt-display)
+  (if recursive
+      (chatgpt-display use-buffer-name)
+    (setq use-buffer-name (chatgpt-display)))
   (lexical-let ((saved-id (if recursive
                               chatgpt-id
                             (cl-incf chatgpt-id)))
@@ -368,24 +377,25 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                 (query_with_id (if recursive
                                    query
                                  (format "%s-%s" (org-id-uuid) query)))
-                (recursive-model use-model))
+                (recursive-model use-model)
+                (use-buffer-name use-buffer-name))
 
     (if recursive
         (setq next-recursive recursive)
       (progn
         (setq next-recursive nil)
-        (chatgpt--insert-query query saved-id)))
+        (chatgpt--insert-query query saved-id use-buffer-name)))
 
     (deferred:$
       (deferred:$
         (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model))
         (deferred:nextc it
           #'(lambda (response)
-              (with-current-buffer (chatgpt-get-output-buffer-name)
+              (with-current-buffer use-buffer-name
                 (save-excursion
                   (if (numberp next-recursive)
                       (goto-char next-recursive)
-                    (chatgpt--goto-identifier chatgpt-id))
+                    (chatgpt--goto-identifier chatgpt-id use-buffer-name))
                   (if (and (stringp response))
                       (progn
                         (insert response)
@@ -403,7 +413,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                               (recenter -1)))))
                       (setq next-recursive nil)))))
               (if next-recursive
-                  (chatgpt--query-stream query_with_id recursive-model next-recursive)))))
+                  (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)))))
       (deferred:error it
         `(lambda (err)
            (message "err is:%s" err))))))
