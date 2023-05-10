@@ -173,7 +173,7 @@ function."
       (select-window saved-win)))
   (get-buffer output-buffer))
 
-(Defun chatgpt--clear-line ()
+(defun chatgpt--clear-line ()
   "Clear line in *ChatGPT*."
   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
   (delete-region (save-excursion (beginning-of-line)
