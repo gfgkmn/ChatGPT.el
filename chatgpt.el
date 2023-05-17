@@ -221,7 +221,7 @@ function."
                              (length (format-mode-line "%l")) 0)))
     (- (/ (- (window-text-width window) (* line-num-width 2)) 1) (+ c-width 2))))
 
-(defun chatgpt--insert-query (query id &optional output-buffer)
+(defun chatgpt--insert-query (query id model-name &optional output-buffer)
   "Insert QUERY with ID into *ChatGPT*."
   (unless output-buffer
     (setq output-buffer (chatgpt-get-output-buffer-name))) ; 创建或获取缓冲区
@@ -231,10 +231,11 @@ function."
       (with-selected-window (get-buffer-window output-buffer)
         (recenter 0))
       (let ((inhibit-read-only t))
-        (insert (format "%s >>> %s\n%s\n%s\n%s"
+        (insert (format "%s %s >>> %s\n%s\n%s\n%s"
                         (if (= (point-min) (point))
                             "\n"
                           "\n\n")
+                        model-name
                         (propertize query 'face 'bold)
                         (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
                         (propertize
@@ -311,7 +312,7 @@ users."
       (chatgpt--add-timer saved-id))
     (when chatgpt-display-on-query
       (chatgpt-display))
-    (chatgpt--insert-query query saved-id)
+    (chatgpt--insert-query query saved-id use_model)
     (print saved-id)
     (deferred:$
       (deferred:$
@@ -384,7 +385,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         (setq next-recursive recursive)
       (progn
         (setq next-recursive nil)
-        (chatgpt--insert-query query saved-id use-buffer-name)))
+        (chatgpt--insert-query query saved-id use-model use-buffer-name)))
 
     (deferred:$
       (deferred:$
