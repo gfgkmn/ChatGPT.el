@@ -412,7 +412,8 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                             (goto-char (point-max))
                             (unless (>= (window-end output-window) (point-max))
                               (recenter -1)))))
-                      (setq next-recursive nil)))))
+                      (setq next-recursive nil)
+                      (save-buffer)))))
               (if next-recursive
                   (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)))))
       (deferred:error it
