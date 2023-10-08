@@ -114,22 +114,23 @@ successful.
 If ChatGPT server is not initialized, 'chatgpt-query' calls this
 function."
   (interactive)
-  (when (equal (shell-command-to-string "pip list | grep revChatGPT") "")
-    (shell-command "pip install revChatGPT")
-    (message "revChatGPT installed through pip.")
-    (chatgpt-login))
-  (when (null chatgpt-repo-path)
-    (error "chatgpt-repo-path is nil. Please set chatgpt-repo-path as specified in joshcho/ChatGPT.el"))
-  (setq chatgpt-process (epc:start-epc python-interpreter (list (expand-file-name
-                                                                 (format "%schatgpt.py"
-                                                                         chatgpt-repo-path))
-                                                                (auth-source-pick-first-password
-                                                                 :host "openai.com"
-                                                                 :user "chatgpt"))))
-  (with-current-buffer (chatgpt-get-output-buffer-name)
-    (visual-line-mode 1)
-    (markdown-mode))
-  (message "ChatGPT initialized."))
+  (let ((default-directory chatgpt-repo-path))
+    (when (equal (shell-command-to-string "pip list | grep revChatGPT") "")
+      (shell-command "pip install revChatGPT")
+      (message "revChatGPT installed through pip.")
+      (chatgpt-login))
+    (when (null chatgpt-repo-path)
+      (error "chatgpt-repo-path is nil. Please set chatgpt-repo-path as specified in joshcho/ChatGPT.el"))
+    (setq chatgpt-process (epc:start-epc python-interpreter (list (expand-file-name
+                                                                   (format "%schatgpt.py"
+                                                                           chatgpt-repo-path))
+                                                                  (auth-source-pick-first-password
+                                                                   :host "openai.com"
+                                                                   :user "chatgpt"))))
+    (with-current-buffer (chatgpt-get-output-buffer-name)
+      (visual-line-mode 1)
+      (markdown-mode))
+    (message "ChatGPT initialized.")))
 
 (defvar chatgpt-wait-timers (make-hash-table)
   "Timers to update the waiting message in the ChatGPT buffer.")
