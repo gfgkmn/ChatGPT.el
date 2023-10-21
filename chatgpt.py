@@ -1,6 +1,7 @@
 # chatgpt.py
 from epc.server import EPCServer
 from revChatGPT.V3 import Chatbot
+import copy
 import sys
 
 password = sys.argv[1]
@@ -44,12 +45,20 @@ def query(query, botname):
     return bots[botname]["identity"].ask(query, **bots[botname]["gen_setting"])
 
 @server.register_function
-def querystream(query_with_id, botname):
+def querystream(query_with_id, botname, reuse):
     global bots
     global stream_reply
 
     if bots[botname]["identity"] == None:
         bots[botname]["identity"] = Chatbot(api_key=password, **bots[botname]["born_setting"])
+
+    if reuse == True:
+        if botname == "ellis":
+            bots[botname]["identity"].conversation = copy.copy(bots["rogers"]["identity"].conversation)
+        else:
+            bots[botname]["identity"].conversation = copy.copy(bots["ellis"]["identity"].conversation)
+        if bots[botname]["identity"].conversation['default'][-1]['role'] == "assitant":
+            bots[botname]["identity"].rollback()
 
     query_with_id = query_with_id.split('-', maxsplit=5)
     query = query_with_id[5]
@@ -61,14 +70,6 @@ def querystream(query_with_id, botname):
     except StopIteration:
         stream_reply.pop(query_id)
         return None
-
-@server.register_function
-def switch_to_chat(chat_uuid, botname):
-    global bots
-    if bots[botname]["identity"] == None:
-        bots[botname]["identity"] = Chatbot(api_key=password, **bots[botname]["born_setting"])
-    bots[botname].conversation_id = chat_uuid
-    return ""
 
 server.print_port()
 server.serve_forever()
