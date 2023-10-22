@@ -296,6 +296,8 @@ function."
 
 (defvar chatgpt-last-query nil)
 
+(defvar chatgpt-last-response (make-marker) "Global variable to store the last response marker")
+
 (defvar chatgpt-last-use-buffer nil)
 
 (defvar chatgpt-last-use-model nil)
@@ -370,12 +372,23 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
       (error "No format string associated with 'query-type' %s. Please customize 'chatgpt-query-format-string-map'" query-type))))
 
 
+;;;###autoload
 (defun chatgpt-reask ()
   ;; switch chatgpt-use-model between gpt35 and gpt4
   ;; but with save conversation history
-  (if (eq chatgpt-last-use-model "ellis")
+  (interactive)
+  (message chatgpt-last-use-model)
+
+  (progn
+    (with-current-buffer chatgpt-last-use-buffer
+      (save-excursion
+        (goto-char chatgpt-last-response)
+        (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+        (delete-region (point) (point-max)))))
+
+  (if (string= chatgpt-last-use-model "ellis")
       (chatgpt--query-stream chatgpt-last-query "rogers" nil chatgpt-last-use-buffer t)
-    (chatgpt--query-stream chatgpt-last-query "ellis" nil chatgpt-last-use-buffer t))
+    (chatgpt--query-stream chatgpt-last-query "ellis" nil chatgpt-last-use-buffer t)))
 
 
 (defun chatgpt--query-stream (query use-model &optional recursive use-buffer-name reuse)
@@ -399,18 +412,22 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                 (recursive-model use-model)
                 (use-buffer-name use-buffer-name)
                 (reuse (if recursive
-                          nil
+                           nil
                          reuse)))
 
     (if recursive
         (setq next-recursive recursive)
       (progn
         (setq next-recursive nil)
+        (set-marker chatgpt-last-response (point))
         (chatgpt--insert-query query saved-id use-model use-buffer-name)))
 
     (deferred:$
      (deferred:$
-      (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model reuse))
+      ;; (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model reuse "default"))
+
+      (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model reuse (buffer-name use-buffer-name)))
+
       (deferred:nextc it
                       #'(lambda (response)
                           (with-current-buffer use-buffer-name
