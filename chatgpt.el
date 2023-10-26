@@ -160,7 +160,7 @@ function."
   (unless output-buffer
     (setq output-buffer (chatgpt-get-output-buffer-name))
     (display-buffer output-buffer)) ; 创建或获取缓冲区
-   ; 显示缓冲区
+                                        ; 显示缓冲区
   (when-let ((saved-win (get-buffer-window (current-buffer)))
              (win (get-buffer-window output-buffer)))
     (unless (equal (current-buffer) output-buffer)
@@ -248,7 +248,7 @@ function."
 
 (defun chatgpt--insert-response (response id)
   "Insert RESPONSE into *ChatGPT* for ID."
-    (with-current-buffer (chatgpt-get-output-buffer-name)
+  (with-current-buffer (chatgpt-get-output-buffer-name)
     (save-excursion
       (chatgpt--goto-identifier id)
       (chatgpt--clear-line)
@@ -294,6 +294,14 @@ function."
 (defvar chatgpt-id 0
   "Tracks responses in the background.")
 
+(defvar chatgpt-last-query nil)
+
+(defvar chatgpt-last-response (make-marker) "Global variable to store the last response marker")
+
+(defvar chatgpt-last-use-buffer nil)
+
+(defvar chatgpt-last-use-model nil)
+
 (defun chatgpt--query (query use-model)
   "Send QUERY to the ChatGPT process.
 
@@ -316,25 +324,25 @@ users."
     (chatgpt--insert-query query saved-id use_model)
     (print saved-id)
     (deferred:$
-      (deferred:$
-        (epc:call-deferred chatgpt-process 'query (list query use-model))
-        (eval `(deferred:nextc it
-                 (lambda (response)
-                   (chatgpt--stop-wait ,saved-id)
-                   (chatgpt--insert-response response ,saved-id)
-                   (when chatgpt-display-on-response
-                     (chatgpt-display)
-                   (and chatgpt-finish-response-hook (run-hooks 'chatgpt-finish-response-hook)))))))
-      (eval
-       `(deferred:error it
-          (lambda (err)
-            (chatgpt--stop-wait ,saved-id)
-            (string-match "\"Error('\\(.*\\)')\"" (error-message-string err))
-            (let ((error-str (match-string 1 (error-message-string err))))
-              (chatgpt--insert-error error-str
-                                     ,saved-id)
-              (when (yes-or-no-p (format "Error encountered. Reset chatgpt (If reset doesn't work, try \"\"pkill ms-playwright/firefox\"\" in the shell then reset)?" error-str))
-                (chatgpt-reset)))))))))
+     (deferred:$
+      (epc:call-deferred chatgpt-process 'query (list query use-model))
+      (eval `(deferred:nextc it
+              (lambda (response)
+                (chatgpt--stop-wait ,saved-id)
+                (chatgpt--insert-response response ,saved-id)
+                (when chatgpt-display-on-response
+                  (chatgpt-display)
+                  (and chatgpt-finish-response-hook (run-hooks 'chatgpt-finish-response-hook)))))))
+     (eval
+      `(deferred:error it
+        (lambda (err)
+          (chatgpt--stop-wait ,saved-id)
+          (string-match "\"Error('\\(.*\\)')\"" (error-message-string err))
+          (let ((error-str (match-string 1 (error-message-string err))))
+            (chatgpt--insert-error error-str
+                                   ,saved-id)
+            (when (yes-or-no-p (format "Error encountered. Reset chatgpt (If reset doesn't work, try \"\"pkill ms-playwright/firefox\"\" in the shell then reset)?" error-str))
+              (chatgpt-reset)))))))))
 
 (defun chatgpt--query-by-type (query query-type use-model)
   "Query ChatGPT with a given QUERY and QUERY-TYPE.
@@ -364,12 +372,34 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
       (error "No format string associated with 'query-type' %s. Please customize 'chatgpt-query-format-string-map'" query-type))))
 
 
-(defun chatgpt--query-stream (query use-model &optional recursive use-buffer-name)
+;;;###autoload
+(defun chatgpt-reask ()
+  ;; switch chatgpt-use-model between gpt35 and gpt4
+  ;; but with save conversation history
+  (interactive)
+  (message chatgpt-last-use-model)
+
+  (progn
+    (with-current-buffer chatgpt-last-use-buffer
+      (save-excursion
+        (goto-char chatgpt-last-response)
+        (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+        (delete-region (point) (point-max)))))
+
+  (if (string= chatgpt-last-use-model "ellis")
+      (chatgpt--query-stream chatgpt-last-query "rogers" nil chatgpt-last-use-buffer t)
+    (chatgpt--query-stream chatgpt-last-query "ellis" nil chatgpt-last-use-buffer t)))
+
+
+(defun chatgpt--query-stream (query use-model &optional recursive use-buffer-name reuse)
   (unless chatgpt-process
     (chatgpt-init))
   (if recursive
       (chatgpt-display use-buffer-name)
-    (setq use-buffer-name (chatgpt-display)))
+    (setq use-buffer-name (chatgpt-display))
+    (setq chatgpt-last-query query)
+    (setq chatgpt-last-use-buffer use-buffer-name)
+    (setq chatgpt-last-use-model use-model))
   (lexical-let ((saved-id (if recursive
                               chatgpt-id
                             (cl-incf chatgpt-id)))
@@ -380,46 +410,53 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                                    query
                                  (format "%s-%s" (org-id-uuid) query)))
                 (recursive-model use-model)
-                (use-buffer-name use-buffer-name))
+                (use-buffer-name use-buffer-name)
+                (reuse (if recursive
+                           nil
+                         reuse)))
 
     (if recursive
         (setq next-recursive recursive)
       (progn
         (setq next-recursive nil)
+        (set-marker chatgpt-last-response (point))
         (chatgpt--insert-query query saved-id use-model use-buffer-name)))
 
     (deferred:$
-      (deferred:$
-        (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model))
-        (deferred:nextc it
-          #'(lambda (response)
-              (with-current-buffer use-buffer-name
-                (save-excursion
-                  (if (numberp next-recursive)
-                      (goto-char next-recursive)
-                    (chatgpt--goto-identifier chatgpt-id use-buffer-name))
-                  (if (and (stringp response))
-                      (progn
-                        (insert response)
-                        (goto-char (point-max))
-                        (setq next-recursive (point)))
-                    (progn
-                      (insert (format "\n\n%s"
-                                      (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
-                      (goto-char (point-max))
-                      (let ((output-window (get-buffer-window (current-buffer))))
-                        (when output-window
-                          (with-selected-window output-window
-                            (goto-char (point-max))
-                            (unless (>= (window-end output-window) (point-max))
-                              (recenter -1)))))
-                      (setq next-recursive nil)
-                      (save-buffer)))))
-              (if next-recursive
-                  (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)))))
-      (deferred:error it
-        `(lambda (err)
-           (message "err is:%s" err))))))
+     (deferred:$
+      ;; (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model reuse "default"))
+
+      (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model reuse (buffer-name use-buffer-name)))
+
+      (deferred:nextc it
+                      #'(lambda (response)
+                          (with-current-buffer use-buffer-name
+                            (save-excursion
+                              (if (numberp next-recursive)
+                                  (goto-char next-recursive)
+                                (chatgpt--goto-identifier chatgpt-id use-buffer-name))
+                              (if (and (stringp response))
+                                  (progn
+                                    (insert response)
+                                    (goto-char (point-max))
+                                    (setq next-recursive (point)))
+                                (progn
+                                  (insert (format "\n\n%s"
+                                                  (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
+                                  (goto-char (point-max))
+                                  (let ((output-window (get-buffer-window (current-buffer))))
+                                    (when output-window
+                                      (with-selected-window output-window
+                                        (goto-char (point-max))
+                                        (unless (>= (window-end output-window) (point-max))
+                                          (recenter -1)))))
+                                  (setq next-recursive nil)
+                                  (save-buffer)))))
+                          (if next-recursive
+                              (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)))))
+     (deferred:error it
+                     `(lambda (err)
+                        (message "err is:%s" err))))))
 
 
 (defun chatgpt--query-by-type-stream (query query-type use-model)
@@ -441,7 +478,7 @@ user to select the type of query to use. The selected query type
 is passed to the 'chatgpt--query-by-type' function along with the
 'query' argument, which sends the query to the ChatGPT model and
 returns the response."
-  ; TODO
+                                        ; TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Query: "))
@@ -466,7 +503,7 @@ Supported query types are:
 * bug: Find bug in query
 * improve: Suggestions for improving code
 * understand: Query for understanding code or behavior"
-  ;TODO
+                                        ;TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Query: "))
