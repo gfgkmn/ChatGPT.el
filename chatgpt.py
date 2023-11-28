@@ -52,6 +52,15 @@ def query(query, botname):
 
 @server.register_function
 def querystream(query_with_id, botname, reuse, convo_id='default'):
+    #  record parameters into a log.txt file
+
+    # with open('log.txt', 'a') as f:
+    #     print(query_with_id, file=f)
+    #     print(botname, file=f)
+    #     print(reuse, file=f)
+    #     print(convo_id, file=f)
+    #     print('----------------', file=f)
+
     global bots
     global stream_reply
     global conversations
@@ -71,7 +80,7 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
             assert convo_id in conversations
             if bots[botname]["identity"].conversation[convo_id][-1][
                     'role'] == "assistant":
-                bots[botname]["identity"].rollback(2)
+                bots[botname]["identity"].rollback(2, convo_id=convo_id)
 
         stream_reply[query_id] = bots[botname]["identity"].ask_stream(
             query, convo_id=convo_id, **bots[botname]["gen_setting"])

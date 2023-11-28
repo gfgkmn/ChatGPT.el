@@ -378,6 +378,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
   ;; but with save conversation history
   (interactive)
   (message chatgpt-last-use-model)
+  (message (buffer-name chatgpt-last-use-buffer))
 
   (progn
     (with-current-buffer chatgpt-last-use-buffer
@@ -396,10 +397,11 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
     (chatgpt-init))
   (if recursive
       (chatgpt-display use-buffer-name)
-    (setq use-buffer-name (chatgpt-display))
-    (setq chatgpt-last-query query)
-    (setq chatgpt-last-use-buffer use-buffer-name)
-    (setq chatgpt-last-use-model use-model))
+    (progn
+      (setq use-buffer-name (chatgpt-display))
+      (setq chatgpt-last-query query)
+      (setq chatgpt-last-use-buffer use-buffer-name)
+      (setq chatgpt-last-use-model use-model)))
   (lexical-let ((saved-id (if recursive
                               chatgpt-id
                             (cl-incf chatgpt-id)))
@@ -424,8 +426,6 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 
     (deferred:$
      (deferred:$
-      ;; (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model reuse "default"))
-
       (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model reuse (buffer-name use-buffer-name)))
 
       (deferred:nextc it
