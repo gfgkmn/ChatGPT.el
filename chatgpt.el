@@ -102,6 +102,10 @@
 
 (defvar chatgpt-finish-response-hook nil)
 
+(defvar chatgpt-interrupt-flag nil "Flag to interrupt the chatgpt process.")
+
+(defvar chatgpt-running-flag nil "Flag to indicate whether chatgpt is running.")
+
 ;;;###autoload
 (defun chatgpt-init ()
   "Initialize the ChatGPT server.
@@ -377,8 +381,17 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
   ;; switch chatgpt-use-model between gpt35 and gpt4
   ;; but with save conversation history
   (interactive)
+  (setq chatgpt-interrupt-flag t)
   (message chatgpt-last-use-model)
   (message (buffer-name chatgpt-last-use-buffer))
+  ;; wait until chatgpt-interrupt-flag is nil
+  (if chatgpt-running-flag
+      (progn
+        (message "ChatGPT is running. Please wait until it finishes.")
+        (while chatgpt-interrupt-flag
+          (sleep-for 0.1))))
+
+  (setq chatgpt-interrupt-flag nil)
 
   (progn
     (with-current-buffer chatgpt-last-use-buffer
@@ -397,8 +410,16 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
   ;; switch chatgpt-use-model between gpt35 and gpt4
   ;; but with save conversation history
   (interactive)
+  (setq chatgpt-interrupt-flag t)
   (message chatgpt-last-use-model)
   (message (buffer-name chatgpt-last-use-buffer))
+  ;; wait until chatgpt-interrupt-flag is nil
+  (if chatgpt-running-flag
+      (progn
+        (message "ChatGPT is running. Please wait until it finishes.")
+        (while chatgpt-interrupt-flag
+          (sleep-for 0.1))))
+  (setq chatgpt-interrupt-flag nil)
 
   (progn
     (with-current-buffer chatgpt-last-use-buffer
@@ -414,7 +435,10 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
   (unless chatgpt-process
     (chatgpt-init))
   (if recursive
-      (chatgpt-display use-buffer-name)
+      (progn
+        (chatgpt-display use-buffer-name)
+        (setq chatgpt-running-flag t))
+
     (progn
       (setq use-buffer-name (chatgpt-display))
       (setq chatgpt-last-query query)
@@ -453,28 +477,37 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                               (if (numberp next-recursive)
                                   (goto-char next-recursive)
                                 (chatgpt--goto-identifier chatgpt-id use-buffer-name))
-                              (if (and (stringp response))
+                              (if chatgpt-interrupt-flag
                                   (progn
-                                    (insert response)
+                                    (setq next-recursive nil)
+                                    (save-buffer))
+                                (if (and (stringp response))
+                                    (progn
+                                      (insert response)
+                                      (goto-char (point-max))
+                                      (setq next-recursive (point)))
+                                  (progn
+                                    (insert (format "\n\n%s"
+                                                    (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
                                     (goto-char (point-max))
-                                    (setq next-recursive (point)))
-                                (progn
-                                  (insert (format "\n\n%s"
-                                                  (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
-                                  (goto-char (point-max))
-                                  (let ((output-window (get-buffer-window (current-buffer))))
-                                    (when output-window
-                                      (with-selected-window output-window
-                                        (goto-char (point-max))
-                                        (unless (>= (window-end output-window) (point-max))
-                                          (recenter -1)))))
-                                  (setq next-recursive nil)
-                                  (save-buffer)))))
+                                    (let ((output-window (get-buffer-window (current-buffer))))
+                                      (when output-window
+                                        (with-selected-window output-window
+                                          (goto-char (point-max))
+                                          (unless (>= (window-end output-window) (point-max))
+                                            (recenter -1)))))
+                                    (setq next-recursive nil)
+                                    (save-buffer))))))
                           (if next-recursive
-                              (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)))))
+                              (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)
+                            (progn
+                              (setq chatgpt-interrupt-flag nil)
+                              (setq chatgpt-running-flag nil))))))
      (deferred:error it
                      `(lambda (err)
-                        (message "err is:%s" err))))))
+                        (message "err is:%s" err)
+                        (setq chatgpt-interrupt-flag nil)
+                        (setq chatgpt-running-flag nil))))))
 
 
 (defun chatgpt--query-by-type-stream (query query-type use-model)
