@@ -81,6 +81,8 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
             if bots[botname]["identity"].conversation[convo_id][-1][
                     'role'] == "assistant":
                 bots[botname]["identity"].rollback(2, convo_id=convo_id)
+            else:
+                bots[botname]["identity"].rollback(1, convo_id=convo_id)
 
         stream_reply[query_id] = bots[botname]["identity"].ask_stream(
             query, convo_id=convo_id, **bots[botname]["gen_setting"])

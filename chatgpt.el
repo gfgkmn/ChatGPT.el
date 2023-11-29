@@ -392,6 +392,24 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
     (chatgpt--query-stream chatgpt-last-query "ellis" nil chatgpt-last-use-buffer t)))
 
 
+;;;###autoload
+(defun chatgpt-again ()
+  ;; switch chatgpt-use-model between gpt35 and gpt4
+  ;; but with save conversation history
+  (interactive)
+  (message chatgpt-last-use-model)
+  (message (buffer-name chatgpt-last-use-buffer))
+
+  (progn
+    (with-current-buffer chatgpt-last-use-buffer
+      (save-excursion
+        (goto-char chatgpt-last-response)
+        (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+        (delete-region (point) (point-max)))))
+
+  (chatgpt--query-stream chatgpt-last-query chatgpt-last-use-model nil chatgpt-last-use-buffer t))
+
+
 (defun chatgpt--query-stream (query use-model &optional recursive use-buffer-name reuse)
   (unless chatgpt-process
     (chatgpt-init))
