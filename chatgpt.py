@@ -1,6 +1,8 @@
 # chatgpt.py
 import copy
 import sys
+import json
+import os
 
 from epc.server import EPCServer
 from revChatGPT.V3 import Chatbot
@@ -9,32 +11,9 @@ password = sys.argv[1]
 
 server = EPCServer(('localhost', 0))
 
-bots = {
-    "ellis": {
-        "born_setting": {
-            "engine": "gpt-3.5-turbo",
-            "system_prompt": "You are a reliable, simple, and faithful code assistant. You can assist people with programming and coding, always providing accurate and dependable code snippets. Additionally, You are capable of helping people debug, refactor, improve, and explain various types of code. When providing code output, please use the ```language=xxx syntax to indicate the language of the code."
-        },
-        "gen_setting": {
-            "temperature": 0.5,
-            "top_p": 0.9,
-            "max_tokens": 500,
-        },
-        "identity": None
-    },
-    "rogers": {
-        "born_setting": {
-            "engine": "gpt-4-1106-preview",
-            "system_prompt": "You are a reliable, straightforward, and trustworthy chat assistant. You provide accurate and dependable code snippets and are capable of helping people debug, refactor, improve, and explain various types of code. Additionally, you possess profound knowledge and eloquence, offering people a wealth of frontier science information and inspiration.When providing code output, please use the ```language=xxx syntax to indicate the language of the code."
-        },
-        "gen_setting": {
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "max_tokens": 500,
-        },
-        "identity": None
-    }
-}
+# get from $home/.config/chatgptel.json
+configpath = os.path.join(os.getenv('HOME'), '.config', 'chatgptel.json')
+bots = json.load(open(configpath, 'r'))
 
 stream_reply = {}
 
