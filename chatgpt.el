@@ -398,6 +398,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
       (save-excursion
         (goto-char chatgpt-last-response)
         (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+        ;; (delete-region chatgpt-last-response (point-max)))))
         (delete-region (point) (point-max)))))
 
   (if (string= chatgpt-last-use-model "ellis")
@@ -426,6 +427,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
       (save-excursion
         (goto-char chatgpt-last-response)
         (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+        ;; (delete-region chatgpt-last-response (point-max)))))
         (delete-region (point) (point-max)))))
 
   (chatgpt--query-stream chatgpt-last-query chatgpt-last-use-model nil chatgpt-last-use-buffer t))
@@ -463,7 +465,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         (setq next-recursive recursive)
       (progn
         (setq next-recursive nil)
-        (set-marker chatgpt-last-response (point))
+        (setq chatgpt-last-response (point))
         (chatgpt--insert-query query saved-id use-model use-buffer-name)))
 
     (deferred:$
