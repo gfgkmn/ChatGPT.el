@@ -102,7 +102,7 @@
 
 (defvar chatgpt-finish-response-hook nil)
 
-(defvar chatgpt-interrupt-flag nil "Flag to interrupt the chatgpt process.")
+(defvar chatgpt-check-running-flag nil "The flag is utilized to denote whether we are within the interval of running the check.")
 
 (defvar chatgpt-running-flag nil "Flag to indicate whether chatgpt is running.")
 
@@ -381,17 +381,17 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
   ;; switch chatgpt-use-model between gpt35 and gpt4
   ;; but with save conversation history
   (interactive)
-  (setq chatgpt-interrupt-flag t)
+  (setq chatgpt-check-running-flag t)
   (message chatgpt-last-use-model)
   (message (buffer-name chatgpt-last-use-buffer))
-  ;; wait until chatgpt-interrupt-flag is nil
+  ;; wait until chatgpt-check-running-flag is nil
   (if chatgpt-running-flag
       (progn
         (message "ChatGPT is running. Please wait until it finishes.")
-        (while chatgpt-interrupt-flag
+        (while chatgpt-check-running-flag
           (sleep-for 0.1))))
 
-  (setq chatgpt-interrupt-flag nil)
+  (setq chatgpt-check-running-flag nil)
 
   (progn
     (with-current-buffer chatgpt-last-use-buffer
@@ -411,16 +411,16 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
   ;; switch chatgpt-use-model between gpt35 and gpt4
   ;; but with save conversation history
   (interactive)
-  (setq chatgpt-interrupt-flag t)
+  (setq chatgpt-check-running-flag t)
   (message chatgpt-last-use-model)
   (message (buffer-name chatgpt-last-use-buffer))
-  ;; wait until chatgpt-interrupt-flag is nil
+  ;; wait until chatgpt-check-running-flag is nil
   (if chatgpt-running-flag
       (progn
         (message "ChatGPT is running. Please wait until it finishes.")
-        (while chatgpt-interrupt-flag
+        (while chatgpt-check-running-flag
           (sleep-for 0.1))))
-  (setq chatgpt-interrupt-flag nil)
+  (setq chatgpt-check-running-flag nil)
 
   (progn
     (with-current-buffer chatgpt-last-use-buffer
@@ -479,7 +479,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                               (if (numberp next-recursive)
                                   (goto-char next-recursive)
                                 (chatgpt--goto-identifier chatgpt-id use-buffer-name))
-                              (if chatgpt-interrupt-flag
+                              (if chatgpt-check-running-flag
                                   (progn
                                     (setq next-recursive nil)
                                     (save-buffer))
@@ -503,12 +503,20 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                           (if next-recursive
                               (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)
                             (progn
-                              (setq chatgpt-interrupt-flag nil)
+                              (setq chatgpt-check-running-flag nil)
                               (setq chatgpt-running-flag nil))))))
      (deferred:error it
                      `(lambda (err)
                         (message "err is:%s" err)
-                        (setq chatgpt-interrupt-flag nil)
+                        (with-current-buffer ,use-buffer-name
+                          (save-excursion
+                            (if (numberp next-recursive)
+                                (goto-char next-recursive)
+                              (chatgpt--goto-identifier ,saved-id ,use-buffer-name))
+                            (chatgpt--clear-line)
+                            (insert (format "ERROR: %s" (error-message-string err)))
+                            (save-buffer)))
+                        (setq chatgpt-check-running-flag nil)
                         (setq chatgpt-running-flag nil))))))
 
 
