@@ -236,6 +236,7 @@ function."
       (with-selected-window (get-buffer-window output-buffer)
         (recenter 0))
       (let ((inhibit-read-only t))
+        (setq chatgpt-last-response (point))
         (insert (format "%s %s >>> %s\n%s\n%s\n%s"
                         (if (= (point-min) (point))
                             "\n"
@@ -465,7 +466,6 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         (setq next-recursive recursive)
       (progn
         (setq next-recursive nil)
-        (setq chatgpt-last-response (point))
         (chatgpt--insert-query query saved-id use-model use-buffer-name)))
 
     (deferred:$
