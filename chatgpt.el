@@ -127,10 +127,7 @@ function."
       (error "chatgpt-repo-path is nil. Please set chatgpt-repo-path as specified in joshcho/ChatGPT.el"))
     (setq chatgpt-process (epc:start-epc python-interpreter (list (expand-file-name
                                                                    (format "%schatgpt.py"
-                                                                           chatgpt-repo-path))
-                                                                  (auth-source-pick-first-password
-                                                                   :host "openai.com"
-                                                                   :user "chatgpt"))))
+                                                                           chatgpt-repo-path)))))
     (with-current-buffer (chatgpt-get-output-buffer-name)
       (visual-line-mode 1)
       (markdown-mode))

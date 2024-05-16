@@ -7,8 +7,6 @@ import os
 from epc.server import EPCServer
 from revChatGPT.V3 import Chatbot
 
-password = sys.argv[1]
-
 server = EPCServer(('localhost', 0))
 
 # get from $home/.config/chatgptel.json
@@ -24,8 +22,7 @@ conversations = {}
 def query(query, botname):
     global bots
     if bots[botname]["identity"] == None:
-        bots[botname]["identity"] = Chatbot(api_key=password,
-                                            **bots[botname]["born_setting"])
+        bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
     return bots[botname]["identity"].ask(query, **bots[botname]["gen_setting"])
 
 
@@ -45,8 +42,7 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
     global conversations
 
     if bots[botname]["identity"] == None:
-        bots[botname]["identity"] = Chatbot(api_key=password,
-                                            **bots[botname]["born_setting"])
+        bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
 
     query_with_id = query_with_id.split('-', maxsplit=5)
     query = query_with_id[5]
