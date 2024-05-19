@@ -326,13 +326,13 @@ users."
 
 
     ;; but this would report void variable use-buffer-name
-  (lexical-let ((use-buffer-name (chatgpt-display))
-        (chatgpt-last-query query)
+  (let ((use-buffer-name (chatgpt-display)))
         ;; (chatgpt-last-use-buffer use-buffer-name)
-        (chatgpt-last-use-model use-model))
         ;; (saved-id (cl-incf chatgpt-id)))
 
+    (setq chatgpt-last-use-model use-model)
     (setq chatgpt-last-use-buffer use-buffer-name)
+    (setq chatgpt-last-query query)
     (setq saved-id (cl-incf chatgpt-id))
 
     (chatgpt--insert-query query saved-id use-model use-buffer-name)
@@ -376,8 +376,7 @@ users."
                     (goto-char (point-max))
                     (unless (>= (window-end output-window) (point-max))
                       (recenter -1)
-                      (save-buffer)))))))))))
-    ))
+                      (save-buffer)))))))))))))
 
 (defun chatgpt--query-by-type (query query-type use-model)
   "Query ChatGPT with a given QUERY and QUERY-TYPE.
@@ -644,6 +643,21 @@ Supported query types are:
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
   (chatgpt-query-stream query "ellis"))
+
+
+;;;###autoload
+(defun chatgpt-query-stream-choose (query)
+  (interactive
+   (list
+    (if (region-active-p)
+        (buffer-substring-no-properties (region-beginning) (region-end))
+      (read-from-minibuffer "ChatGPT Stream Query: "))))
+  ;; Prompt the user to choose one of the options
+  (let* ((choices '("charles" "maxwell" "harrison" "ellis" "rogers"))
+                (choice (ivy-read "Choose one: " choices
+                                  :initial-input chatgpt-last-use-model)))
+    ;; Use chosen option to query stream
+    (chatgpt-query-stream query choice)))
 
 
 ;;;###autoload
