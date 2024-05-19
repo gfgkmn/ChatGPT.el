@@ -19,11 +19,11 @@ conversations = {}
 
 
 @server.register_function
-def query(query, botname):
+def query(query, botname, convo_id='default'):
     global bots
     if bots[botname]["identity"] == None:
         bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
-    return bots[botname]["identity"].ask(query, **bots[botname]["gen_setting"])
+    return bots[botname]["identity"].ask(query, convo_id=convo_id, **bots[botname]["gen_setting"])
 
 
 @server.register_function

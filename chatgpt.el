@@ -248,9 +248,11 @@ function."
                             ""
                           (concat "Waiting for ChatGPT..."))))))))
 
-(defun chatgpt--insert-response (response id)
+(defun chatgpt--insert-response (response id &optional output-buffer)
   "Insert RESPONSE into *ChatGPT* for ID."
-  (with-current-buffer (chatgpt-get-output-buffer-name)
+  (unless output-buffer
+    (setq output-buffer (chatgpt-get-output-buffer-name))) ; 创建或获取缓冲区
+  (with-current-buffer output-buffer
     (save-excursion
       (chatgpt--goto-identifier id)
       (chatgpt--clear-line)
@@ -259,9 +261,11 @@ function."
         (insert (format "\n\n%s"
                         (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))))))
 
-(defun chatgpt--insert-error (error-msg id)
+(defun chatgpt--insert-error (error-msg id &optional output-buffer)
   "Insert ERROR-MSG into *ChatGPT* for ID."
-  (with-current-buffer (chatgpt-get-output-buffer-name)
+  (unless output-buffer
+    (setq output-buffer (chatgpt-get-output-buffer-name))) ; 创建或获取缓冲区
+  (with-current-buffer output-buffer
     (save-excursion
       (chatgpt--goto-identifier id)
       (chatgpt--clear-line)
@@ -318,23 +322,41 @@ This function is intended to be called internally by the
 users."
   (unless chatgpt-process
     (chatgpt-init))
-  (let ((saved-id (cl-incf chatgpt-id)))
+  ;; support invisible invoke
+
+
+    ;; but this would report void variable use-buffer-name
+  (lexical-let ((use-buffer-name (chatgpt-display))
+        (chatgpt-last-query query)
+        ;; (chatgpt-last-use-buffer use-buffer-name)
+        (chatgpt-last-use-model use-model))
+        ;; (saved-id (cl-incf chatgpt-id)))
+
+    (setq chatgpt-last-use-buffer use-buffer-name)
+    (setq saved-id (cl-incf chatgpt-id))
+
+    (chatgpt--insert-query query saved-id use-model use-buffer-name)
     (when chatgpt-enable-loading-ellipsis
       (chatgpt--add-timer saved-id))
-    (when chatgpt-display-on-query
-      (chatgpt-display))
-    (chatgpt--insert-query query saved-id use_model)
-    (print saved-id)
     (deferred:$
      (deferred:$
-      (epc:call-deferred chatgpt-process 'query (list query use-model))
+      (epc:call-deferred chatgpt-process 'query (list query use-model (buffer-name chatgpt-last-use-buffer)))
       (eval `(deferred:nextc it
               (lambda (response)
                 (chatgpt--stop-wait ,saved-id)
-                (chatgpt--insert-response response ,saved-id)
+                (chatgpt--insert-response response ,saved-id chatgpt-last-use-buffer)
                 (when chatgpt-display-on-response
-                  (chatgpt-display)
-                  (and chatgpt-finish-response-hook (run-hooks 'chatgpt-finish-response-hook)))))))
+                  (chatgpt-display chatgpt-last-use-buffer)
+                  (and chatgpt-finish-response-hook (run-hooks 'chatgpt-finish-response-hook)))
+                (with-current-buffer chatgpt-last-use-buffer
+                  (goto-char (point-max))
+                  (let ((output-window (get-buffer-window (current-buffer))))
+                    (when output-window
+                      (with-selected-window output-window
+                        (goto-char (point-max))
+                        (unless (>= (window-end output-window) (point-max))
+                          (recenter -1)
+                          (save-buffer))))))))))
      (eval
       `(deferred:error it
         (lambda (err)
@@ -342,9 +364,20 @@ users."
           (string-match "\"Error('\\(.*\\)')\"" (error-message-string err))
           (let ((error-str (match-string 1 (error-message-string err))))
             (chatgpt--insert-error error-str
-                                   ,saved-id)
-            (when (yes-or-no-p (format "Error encountered. Reset chatgpt (If reset doesn't work, try \"\"pkill ms-playwright/firefox\"\" in the shell then reset)?" error-str))
-              (chatgpt-reset)))))))))
+                                   ,saved-id
+                                   chatgpt-last-use-buffer)
+            ;; (when (yes-or-no-p (format "Error encountered. Reset chatgpt (If reset doesn't work, try \"\"pkill ms-playwright/firefox\"\" in the shell then reset)?" error-str))
+            ;;   (chatgpt-reset))
+            (with-current-buffer chatgpt-last-use-buffer
+              (goto-char (point-max))
+              (let ((output-window (get-buffer-window (current-buffer))))
+                (when output-window
+                  (with-selected-window output-window
+                    (goto-char (point-max))
+                    (unless (>= (window-end output-window) (point-max))
+                      (recenter -1)
+                      (save-buffer)))))))))))
+    ))
 
 (defun chatgpt--query-by-type (query query-type use-model)
   "Query ChatGPT with a given QUERY and QUERY-TYPE.
@@ -611,6 +644,14 @@ Supported query types are:
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
   (chatgpt-query-stream query "ellis"))
+
+
+;;;###autoload
+(defun chatgpt-query-gpt4o (query)
+  (interactive (list (if (region-active-p)
+                         (buffer-substring-no-properties (region-beginning) (region-end))
+                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+  (chatgpt-query query "maxwell"))
 
 (provide 'chatgpt)
 ;;; chatgpt.el ends here
