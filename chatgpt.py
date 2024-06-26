@@ -23,6 +23,10 @@ def query(query, botname, convo_id='default'):
     global bots
     if bots[botname]["identity"] == None:
         bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
+
+    # if botname in [maxwell], then reset conversation
+    if botname in ['maxwell', 'harrison']:
+        bots[botname]["identity"].reset(convo_id=convo_id)
     return bots[botname]["identity"].ask(query, convo_id=convo_id, **bots[botname]["gen_setting"])
 
 
@@ -58,6 +62,10 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
                 bots[botname]["identity"].rollback(2, convo_id=convo_id)
             else:
                 bots[botname]["identity"].rollback(1, convo_id=convo_id)
+
+
+        if botname in ['maxwell', 'harrison']:
+            bots[botname]["identity"].reset(convo_id=convo_id)
 
         stream_reply[query_id] = bots[botname]["identity"].ask_stream(
             query, convo_id=convo_id, **bots[botname]["gen_setting"])
