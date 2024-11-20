@@ -133,6 +133,16 @@ function."
       (markdown-mode))
     (message "ChatGPT initialized.")))
 
+(defun chatgpt-query-epc-port ()
+  "Query the EPC server port for the ChatGPT process.
+This function retrieves and displays the port number of the running EPC server."
+  (interactive)
+  (if (and chatgpt-process (epc:manager-p chatgpt-process))
+      (let ((port (epc:manager-port chatgpt-process)))
+        (message "ChatGPT EPC server is running on port: %d" port)
+        port)
+    (error "ChatGPT EPC server is not running.")))
+
 (defvar chatgpt-wait-timers (make-hash-table)
   "Timers to update the waiting message in the ChatGPT buffer.")
 
