@@ -50,39 +50,36 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
     global stream_reply
     global conversations
 
+    if bots[botname]["identity"] == None:
+        bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
+
+    query_with_id = query_with_id.split('-', maxsplit=5)
+    query = query_with_id[5]
+    query_id = '-'.join(query_with_id[:5])
+    if query_id not in stream_reply:
+
+        bots[botname]["identity"].conversation = conversations
+
+        if reuse == True:
+            assert convo_id in conversations
+            if bots[botname]["identity"].conversation[convo_id][-1][
+                    'role'] == "assistant":
+                bots[botname]["identity"].rollback(2, convo_id=convo_id)
+            else:
+                bots[botname]["identity"].rollback(1, convo_id=convo_id)
+
+
+        if botname in ['maxwell', 'harrison']:
+            bots[botname]["identity"].reset(convo_id=convo_id)
+
+        stream_reply[query_id] = bots[botname]["identity"].ask_stream(
+            query, convo_id=convo_id, **bots[botname]["gen_setting"])
     try:
-        if bots[botname]["identity"] == None:
-            bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
-
-        query_with_id = query_with_id.split('-', maxsplit=5)
-        query = query_with_id[5]
-        query_id = '-'.join(query_with_id[:5])
-        if query_id not in stream_reply:
-
-            bots[botname]["identity"].conversation = conversations
-
-            if reuse == True:
-                assert convo_id in conversations
-                if bots[botname]["identity"].conversation[convo_id][-1][
-                        'role'] == "assistant":
-                    bots[botname]["identity"].rollback(2, convo_id=convo_id)
-                else:
-                    bots[botname]["identity"].rollback(1, convo_id=convo_id)
-
-
-            if botname in ['maxwell', 'harrison']:
-                bots[botname]["identity"].reset(convo_id=convo_id)
-
-            stream_reply[query_id] = bots[botname]["identity"].ask_stream(
-                query, convo_id=convo_id, **bots[botname]["gen_setting"])
         return next(stream_reply[query_id])
     except StopIteration:
         stream_reply.pop(query_id)
         conversations = copy.deepcopy(bots[botname]["identity"].conversation)
         return None
-    except Exception:
-        traceback_str = traceback.format_exc()
-        return traceback_str
 
 
 server.print_port()
