@@ -3,6 +3,7 @@
 from epc.client import EPCClient
 import os
 import time
+import traceback
 
 # Load configuration
 config_path = os.path.join(os.getenv('HOME'), '.config', 'chatgptel.json')
@@ -11,13 +12,14 @@ if not os.path.exists(config_path):
 
 # Define the EPC server host and port
 host = 'localhost'
-port = 61675
+port = 51988
 
 # Initialize EPC client
 client = EPCClient((host, port))
 
 # Define test parameters
-botname = "harrison"  # Replace with your bot's name in chatgptel.json
+# botname = "harrison"  # Replace with your bot's name in chatgptel.json
+botname = "rogers"  # Replace with your bot's name in chatgptel.json
 query_text = "Hello! How are you doing today?"
 
 # Test the `query` function
@@ -27,18 +29,24 @@ print("Response:", response)
 
 # Test the `querystream` function
 print("\nTesting `querystream` function...")
+
 try:
-    query_id = "test-query-1"
+    # emacs org-id-uuid function for python
+    query_with_id = "b7e8d0b0-1c6b-4c7e-bf6d-4b7b6d4e8c4e"
+    # query_with_id = f"{query_id}-{query_text}"
     response_stream = []
     while True:
-        reply = client.call_sync('querystream', [f"{query_id}-user-{query_text}", botname, False])
-        if reply is None:
+        reply = client.call_sync('querystream', [query_with_id, botname, False])
+        if reply[3] == []:
             break
-        response_stream.append(reply)
-        print("Streamed Reply:", reply)
+        elif reply[1] == 1:
+            raise Exception("Error in `querystream` test:", reply[3])
+        response_stream.append(reply[3])
+        print("Streamed Reply:", reply[3])
     print("Complete Streamed Response:", "".join(response_stream))
 except Exception as e:
-    print("Error in `querystream` test:", e)
+    error_message = traceback.format_exc()
+    print("Error in `querystream` test:", error_message)
 
 # Close the client
 client.close()
