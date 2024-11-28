@@ -476,6 +476,9 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 (defun chatgpt--query-stream (query use-model &optional recursive use-buffer-name reuse)
   (unless chatgpt-process
     (chatgpt-init))
+
+  ;; (message "DEBUG: query=%s, use-model=%s, recursive=%s, use-buffer-name=%s, reuse=%s"
+  ;;          query use-model recursive use-buffer-name reuse)
   (if recursive
       (progn
         (chatgpt-display use-buffer-name)
@@ -506,6 +509,10 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
       (progn
         (setq next-recursive nil)
         (chatgpt--insert-query query saved-id use-model use-buffer-name)))
+
+
+    ;; (message "DEBUG: Calling EPC with query_with_id=%s, recursive-model=%s, reuse=%s, buffer-name=%s"
+    ;;          query_with_id recursive-model reuse (buffer-name use-buffer-name))
 
     (deferred:$
      (deferred:$
@@ -543,7 +550,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                                   (progn ; Error response
                                     (insert (format "ERROR: %s" (plist-get response :message)))
                                     (setq next-recursive nil)
-                                    (save-buffer)))))))
+                                    (save-buffer))))))
                           (if next-recursive
                               (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)
                             (progn
