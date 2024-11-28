@@ -529,21 +529,26 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                                   (progn
                                     (setq next-recursive nil)
                                     (save-buffer))
-                                (if (and (stringp response))
-                                    (progn
-                                      (insert response)
-                                      (goto-char (point-max))
-                                      (setq next-recursive (point)))
-                                  (progn
-                                    (insert (format "\n\n%s"
-                                                    (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
-                                    (goto-char (point-max))
-                                    (let ((output-window (get-buffer-window (current-buffer))))
-                                      (when output-window
-                                        (with-selected-window output-window
+                                (if (= (plist-get response :type) 0)  ; Normal response
+                                    (if (plist-get response :message) ; Check if message exists
+                                        (progn
+                                          (insert (plist-get response :message))
                                           (goto-char (point-max))
-                                          (unless (>= (window-end output-window) (point-max))
-                                            (recenter -1)))))
+                                          (setq next-recursive (point)))
+                                      (progn  ; End of stream
+                                        (insert (format "\n\n%s"
+                                                      (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
+                                        (goto-char (point-max))
+                                        (let ((output-window (get-buffer-window (current-buffer))))
+                                          (when output-window
+                                            (with-selected-window output-window
+                                              (goto-char (point-max))
+                                              (unless (>= (window-end output-window) (point-max))
+                                                (recenter -1)))))
+                                        (setq next-recursive nil)
+                                        (save-buffer)))
+                                  (progn ; Error response
+                                    (insert (format "ERROR: %s" (plist-get response :message)))
                                     (setq next-recursive nil)
                                     (save-buffer))))))
                           (if next-recursive
