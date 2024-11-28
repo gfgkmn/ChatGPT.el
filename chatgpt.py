@@ -37,8 +37,8 @@ def query(query, botname, convo_id='default'):
 
 @server.register_function
 def querystream(query_with_id, botname, reuse, convo_id='default'):
-    # record parameters into a log.txt file
-    # Uncomment the logging block if needed:
+    #  record parameters into a log.txt file
+
     # with open('log.txt', 'a') as f:
     #     print(query_with_id, file=f)
     #     print(botname, file=f)
@@ -50,42 +50,37 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
     global stream_reply
     global conversations
 
+    if bots[botname]["identity"] == None:
+        bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
+
+    query_with_id = query_with_id.split('-', maxsplit=5)
+    query = query_with_id[5]
+    query_id = '-'.join(query_with_id[:5])
+    if query_id not in stream_reply:
+
+        bots[botname]["identity"].conversation = conversations
+
+        if reuse == True:
+            assert convo_id in conversations
+            if bots[botname]["identity"].conversation[convo_id][-1][
+                    'role'] == "assistant":
+                bots[botname]["identity"].rollback(2, convo_id=convo_id)
+            else:
+                bots[botname]["identity"].rollback(1, convo_id=convo_id)
+
+
+        if botname in ['maxwell', 'harrison']:
+            bots[botname]["identity"].reset(convo_id=convo_id)
+
+        stream_reply[query_id] = bots[botname]["identity"].ask_stream(
+            query, convo_id=convo_id, **bots[botname]["gen_setting"])
     try:
-        # Initialize chatbot if not already created
-        if bots[botname]["identity"] is None:
-            bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
-
-        # Parse query ID and query
-        query_with_id = query_with_id.split('-', maxsplit=5)
-        query = query_with_id[5]
-        query_id = '-'.join(query_with_id[:5])
-
-        if query_id not in stream_reply:
-            bots[botname]["identity"].conversation = conversations
-
-            if reuse:
-                assert convo_id in conversations
-                if bots[botname]["identity"].conversation[convo_id][-1]['role'] == "assistant":
-                    bots[botname]["identity"].rollback(2, convo_id=convo_id)
-                else:
-                    bots[botname]["identity"].rollback(1, convo_id=convo_id)
-
-            if botname in ['maxwell', 'harrison']:
-                bots[botname]["identity"].reset(convo_id=convo_id)
-
-            stream_reply[query_id] = bots[botname]["identity"].ask_stream(
-                query, convo_id=convo_id, **bots[botname]["gen_setting"])
-
-        return {"type": 0, "message": next(stream_reply[query_id])}
+        return next(stream_reply[query_id])
     except StopIteration:
-        # Handle StopIteration and cleanup
         stream_reply.pop(query_id)
         conversations = copy.deepcopy(bots[botname]["identity"].conversation)
-        return {"type": 0, "message": None}
-    except Exception as e:
-        # Handle any other exceptions
-        error_info = f"Exception: {str(e)}\n{traceback.format_exc()}"
-        return {"type": 1, "message": error_info}
+        return None
+
 
 server.print_port()
 server.serve_forever()
