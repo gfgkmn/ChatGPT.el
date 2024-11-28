@@ -28,8 +28,9 @@ print("Response:", response)
 # Test the `querystream` function
 print("\nTesting `querystream` function...")
 try:
-    query_id = "b7e8d0b0-1c6b-4c7e-bf6d-4b7b6d4e8c4e"
-    query_with_id = f"{query_id}-{query_text}"
+    # emacs org-id-uuid function for python
+    query_with_id = "b7e8d0b0-1c6b-4c7e-bf6d-4b7b6d4e8c4e"
+    query_with_id = f"{query_with_id}-{query_text}"
     response_stream = []
     while True:
         reply = client.call_sync('querystream',[query_with_id, botname, False])
