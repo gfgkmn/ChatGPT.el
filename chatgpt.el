@@ -64,7 +64,7 @@
   :type 'string
   :group 'chatgpt)
 
-(defcustom chatgpt-default-model "ellis"
+(defcustom chatgpt-default-model "perplexity"
   "The model to use for ChatGPT."
   :type 'string
   :group 'chatgpt)
@@ -441,9 +441,9 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         ;; (delete-region chatgpt-last-response (point-max)))))
         (delete-region (point) (point-max)))))
 
-  (if (string= chatgpt-last-use-model "ellis")
-      (chatgpt--query-stream chatgpt-last-query "rogers" nil chatgpt-last-use-buffer t)
-    (chatgpt--query-stream chatgpt-last-query "ellis" nil chatgpt-last-use-buffer t)))
+  (if (string= chatgpt-last-use-model "perplexity")
+      (chatgpt--query-stream chatgpt-last-query "gpt4o" nil chatgpt-last-use-buffer t)
+    (chatgpt--query-stream chatgpt-last-query "perplexity" nil chatgpt-last-use-buffer t)))
 
 
 ;;;###autoload
@@ -657,14 +657,14 @@ Supported query types are:
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
-  (chatgpt-query-stream query "rogers"))
+  (chatgpt-query-stream query "gpt4o"))
 
 ;;;###autoload
 (defun chatgpt-query-stream-gpt35 (query)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
-  (chatgpt-query-stream query "ellis"))
+  (chatgpt-query-stream query "perplexity"))
 
 
 ;;;###autoload
@@ -675,7 +675,7 @@ Supported query types are:
         (buffer-substring-no-properties (region-beginning) (region-end))
       (read-from-minibuffer "ChatGPT Stream Query: "))))
   ;; Prompt the user to choose one of the options
-  (let* ((choices '("charles" "maxwell" "harrison" "ellis" "rogers"))
+  (let* ((choices '("perplexity" "gpt4o" "lispgpt" "pythongpt" "qwen25" "claude"))
                 (choice (ivy-read "Choose one: " choices
                                   :initial-input chatgpt-last-use-model)))
     ;; Use chosen option to query stream
@@ -687,7 +687,7 @@ Supported query types are:
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
-  (chatgpt-query query "maxwell"))
+  (chatgpt-query query "gpt4o"))
 
 (provide 'chatgpt)
 ;;; chatgpt.el ends here
