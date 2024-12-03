@@ -668,18 +668,18 @@ Supported query types are:
 
 
 ;;;###autoload
-(defun chatgpt-query-stream-choose (query)
+(defun chatgpt-query-stream-choose (query choice)
   (interactive
    (list
     (if (region-active-p)
         (buffer-substring-no-properties (region-beginning) (region-end))
-      (read-from-minibuffer "ChatGPT Stream Query: "))))
-  ;; Prompt the user to choose one of the options
-  (let* ((choices '("perplexity" "gpt4o" "lispgpt" "pythongpt" "qwen25" "claude"))
-                (choice (ivy-read "Choose one: " choices
-                                  :initial-input chatgpt-last-use-model)))
-    ;; Use chosen option to query stream
-    (chatgpt-query-stream query choice)))
+      (read-from-minibuffer "ChatGPT Stream Query: "))
+    nil))  ; Default choice to nil when called interactively
+  (let ((model (or choice
+                   (let ((choices '("perplexity" "gpt4o" "lispgpt" "pythongpt" "qwen25" "claude")))
+                     (ivy-read "Choose one: " choices
+                               :initial-input chatgpt-last-use-model)))))
+    (chatgpt-query-stream query model)))
 
 
 ;;;###autoload
