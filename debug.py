@@ -12,14 +12,14 @@ if not os.path.exists(config_path):
 
 # Define the EPC server host and port
 host = 'localhost'
-port = 50836
+port = 59112
 
 # Initialize EPC client
 client = EPCClient((host, port))
 
 # Define test parameters
 # botname = "harrison"  # Replace with your bot's name in chatgptel.json
-botname = "rogers"  # Replace with your bot's name in chatgptel.json
+botname = "dsr1"  # Replace with your bot's name in chatgptel.json
 query_text = "Hello! How are you doing today?"
 
 # Test the `query` function

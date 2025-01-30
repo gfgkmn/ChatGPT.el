@@ -56,6 +56,19 @@
   :type 'string
   :group 'chatgpt)
 
+
+(defcustom chatgpt-ai-choices
+  '("perplexity" "gpt4o" "lispgpt" "pythongpt" "qwen25" "claude" "dsr1")
+  "List of AI choices available for selection."
+  :type '(repeat string)
+  :group 'chatgpt)
+
+
+(defcustom chatgpt-second-preferest-model "perplexity"
+  "Chatgpt buffer name"
+  :type 'string
+  :group 'chatgpt)
+
 (defvar chatgpt-process nil
   "The ChatGPT process.")
 
@@ -64,7 +77,7 @@
   :type 'string
   :group 'chatgpt)
 
-(defcustom chatgpt-default-model "perplexity"
+(defcustom chatgpt-default-model "claude"
   "The model to use for ChatGPT."
   :type 'string
   :group 'chatgpt)
@@ -657,14 +670,14 @@ Supported query types are:
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
-  (chatgpt-query-stream query "gpt4o"))
+  (chatgpt-query-stream query chatgpt-default-model))
 
 ;;;###autoload
 (defun chatgpt-query-stream-gpt35 (query)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
-  (chatgpt-query-stream query "perplexity"))
+  (chatgpt-query-stream query chatgpt-second-preferest-model))
 
 
 ;;;###autoload
@@ -676,7 +689,7 @@ Supported query types are:
       (read-from-minibuffer "ChatGPT Stream Query: "))
     nil))  ; Default choice to nil when called interactively
   (let ((model (or choice
-                   (let ((choices '("perplexity" "gpt4o" "lispgpt" "pythongpt" "qwen25" "claude")))
+                   (let ((choices chatgpt-ai-choices))
                      (ivy-read "Choose one: " choices
                                :initial-input chatgpt-last-use-model)))))
     (chatgpt-query-stream query model)))
