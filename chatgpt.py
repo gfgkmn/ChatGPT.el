@@ -36,21 +36,20 @@ def is_valid_folder_path(path):
     """Check if the path is a valid directory and exists."""
     return os.path.isdir(path)
 
-def extract_valid_paths(text, path_checker):
-    """Extracts only valid file/folder paths, stopping at the first invalid path."""
-    paths = text.strip().split()
-    valid_paths = []
-    extracted_string = ""
 
-    for path in paths:
-        cleaned_path = path.strip().rstrip(",.!?")  # Strip trailing punctuation
-        if path_checker(cleaned_path):
-            valid_paths.append(cleaned_path)
-        else:
-            break  # Stop at the first invalid path
+def get_git_root():
+    """Find the current Git repository root directory."""
+    git_root = os.popen("git rev-parse --show-toplevel 2>/dev/null").read().strip()
+    return git_root if os.path.isdir(git_root) else None
 
-    extracted_string = " ".join(valid_paths)
-    return valid_paths, extracted_string
+def extract_valid_path(text, path_checker):
+    """Extracts a valid file/folder path from within @[[path]] or #[[path]]"""
+    match = re.match(r"\[\[([^\]]+)\]\]", text)  # Extract path inside [[ ]]
+    if match:
+        path = match.group(1).strip()
+        if path_checker(path):
+            return path
+    return None
 
 def read_file_content(file_path):
     """Reads file content safely."""
@@ -64,54 +63,46 @@ def get_files_from_folder(folder_path, extensions=[".py", ".json", ".md"]):
         files.extend(glob.glob(os.path.join(folder_path, f"**/*{ext}"), recursive=True))
     return files
 
-def process_at_syntax(query):
-    """Extracts @file, @folder, and @project content while modifying the query accordingly."""
+def process_syntax(query):
+    """Extracts @[[file]], #[[folder]], and @project content while modifying the query."""
     file_contents = []
     display_files = ""
 
-    # Match @file, @folder, and @project
-    file_match = re.search(r"@file\s+([^\n@]+)", query)
-    folder_match = re.search(r"@folder\s+([^\n@]+)", query)
-    project_match = re.search(r"@project", query)
+    # Match @[[file_path]], #[[folder_path]], and @project
+    file_match = re.search(r"@\[\[([^\]]+)\]\]", query)
+    folder_match = re.search(r"#\[\[([^\]]+)\]\]", query)
+    git_match = re.search(r"\@project", query)
 
-    # Process @file command
+    # Process @[[file_path]]
     if file_match:
-        raw_paths = file_match.group(1)
-        valid_file_paths, file_extracted_text = extract_valid_paths(raw_paths, is_valid_file_path)
+        file_path = file_match.group(1)
+        if is_valid_file_path(file_path):
+            content = read_file_content(file_path)
+            file_contents.append(f"### File: {file_path} ###\n{content}")
+            query = query.replace(f"@[[{file_path}]]", "{Files_show_above}").strip()
+            display_files += file_path + " "
 
-        for path in valid_file_paths:
-            content = read_file_content(path)
-            file_contents.append(f"### File: {path} ###\n{content}")
-
-        if file_extracted_text:
-            query = query.replace(f"@file {file_extracted_text}", "{Files_show_above}").strip()
-            display_files += file_extracted_text + " "
-
-    # Process @folder command
+    # Process #[[folder_path]]
     if folder_match:
-        raw_paths = folder_match.group(1)
-        valid_folder_paths, folder_extracted_text = extract_valid_paths(raw_paths, is_valid_folder_path)
-
-        for folder in valid_folder_paths:
-            folder_files = get_files_from_folder(folder)
+        folder_path = folder_match.group(1)
+        if is_valid_folder_path(folder_path):
+            folder_files = get_files_from_folder(folder_path)
             for file_path in folder_files:
                 content = read_file_content(file_path)
                 file_contents.append(f"### File: {file_path} ###\n{content}")
-
-        if folder_extracted_text:
-            query = query.replace(f"@folder {folder_extracted_text}", "{Files_show_above}").strip()
-            display_files += folder_extracted_text + " "
+            query = query.replace(f"#[[{folder_path}]]", "{Files_show_above}").strip()
+            display_files += " ".join(folder_files) + " "
 
     # Process @project command
-    if project_match:
-        project_files = get_files_from_folder(".")  # Assume current directory as project root
-        query = query.replace("@project", "{Files_show_above}").strip()
-
-        for path in project_files:
-            content = read_file_content(path)
-            file_contents.append(f"### File: {path} ###\n{content}")
-        display_files += ' '.join(project_files)
-
+    if git_match:
+        git_root = get_git_root()
+        if git_root:
+            project_files = get_files_from_folder(git_root)
+            query = query.replace("@project", "{Files_show_above}").strip()
+            for path in project_files:
+                content = read_file_content(path)
+                file_contents.append(f"### File: {path} ###\n{content}")
+            display_files += ' '.join(project_files)
 
     # Construct new query with delimiters
     if file_contents:
@@ -119,7 +110,6 @@ def process_at_syntax(query):
         query = f"{extracted_code}\n\n--- USER QUERY ---\n\n{query}"
 
     return query, format_display_files(display_files)
-
 
 @server.register_function
 def query(query, botname, convo_id='default'):
@@ -132,12 +122,11 @@ def query(query, botname, convo_id='default'):
         if botname in ['maxwell', 'harrison']:
             bots[botname]["identity"].reset(convo_id=convo_id)
 
-        query, display_files = process_at_syntax(query)
+        query, display_files = process_syntax(query)
         return display_files + bots[botname]["identity"].ask(query, convo_id=convo_id, **bots[botname]["gen_setting"])
 
     except Exception:
         return traceback.format_exc()
-
 
 @server.register_function
 def querystream(query_with_id, botname, reuse, convo_id='default'):
@@ -165,7 +154,7 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
             if botname in ['maxwell', 'harrison']:
                 bots[botname]["identity"].reset(convo_id=convo_id)
 
-            query, display_files = process_at_syntax(query)
+            query, display_files = process_syntax(query)
             stream_reply[query_id] = bots[botname]["identity"].ask_stream(
                 query, convo_id=convo_id, **bots[botname]["gen_setting"])
 
