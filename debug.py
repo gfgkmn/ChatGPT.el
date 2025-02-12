@@ -12,7 +12,8 @@ if not os.path.exists(config_path):
 
 # Define the EPC server host and port
 host = 'localhost'
-port = 59112
+with open("epc_port.txt", "r") as f:
+    port = int(f.read().strip())
 
 # Initialize EPC client
 client = EPCClient((host, port))

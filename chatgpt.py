@@ -4,6 +4,8 @@ import sys
 import json
 import os
 import traceback
+import glob
+import re
 
 from epc.server import EPCServer
 from revChatGPT.V3 import Chatbot
@@ -18,6 +20,51 @@ stream_reply = {}
 
 conversations = {}
 
+def read_file_content(file_path):
+    """Reads file content safely."""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"Error reading {file_path}: {str(e)}"
+
+def get_project_files(directory=".", extensions=[".py", ".json", ".md"]):
+    """Gets all files with the given extensions in the directory recursively."""
+    files = []
+    for ext in extensions:
+        files.extend(glob.glob(f"{directory}/**/*{ext}", recursive=True))
+    return files
+
+def process_at_syntax(query):
+    """Extracts @file and @project content and returns a modified query."""
+    file_contents = []
+
+    # Match @file <path1> <path2> and @project
+    file_match = re.findall(r"@file\s+([\S ]+?)(?=\s*@|$)", query)
+    project_match = re.search(r"@project", query)
+
+    # Process @file command
+    if file_match:
+        file_paths = file_match[0].split()  # Extract file paths
+        for path in file_paths:
+            content = read_file_content(path)
+            file_contents.append(f"### File: {path} ###\n{content}")
+
+    # Process @project command
+    if project_match:
+        project_files = get_project_files()
+        for path in project_files:
+            content = read_file_content(path)
+            file_contents.append(f"### File: {path} ###\n{content}")
+
+    # Construct new query with delimiters
+    if file_contents:
+        extracted_code = "\n\n--- FILE CONTEXT ---\n\n".join(file_contents)
+        query = re.sub(r"@file\s+[\S ]+?|@project", "above files", query)  # Remove @file/@project syntax from query
+        query = f"{extracted_code}\n\n--- USER QUERY ---\n\n{query.strip()}"
+
+    return query
+
 
 @server.register_function
 def query(query, botname, convo_id='default'):
@@ -29,6 +76,8 @@ def query(query, botname, convo_id='default'):
         # if botname in [maxwell], then reset conversation
         if botname in ['maxwell', 'harrison']:
             bots[botname]["identity"].reset(convo_id=convo_id)
+
+        query = process_at_syntax(query)
         return bots[botname]["identity"].ask(query, convo_id=convo_id, **bots[botname]["gen_setting"])
     except Exception:
         traceback_str = traceback.format_exc()
@@ -73,6 +122,7 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
             if botname in ['maxwell', 'harrison']:
                 bots[botname]["identity"].reset(convo_id=convo_id)
 
+            query = process_at_syntax(query)
             stream_reply[query_id] = bots[botname]["identity"].ask_stream(
                 query, convo_id=convo_id, **bots[botname]["gen_setting"])
 
@@ -87,5 +137,8 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
         error_info = f"Exception: {str(e)}\n{traceback.format_exc()}"
         return {"type": 1, "message": error_info}
 
+# port = server.server_address[1]  # Get the port number
+# with open("epc_port.txt", "w") as f:
+#     f.write(str(port))
 server.print_port()
 server.serve_forever()
