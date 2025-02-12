@@ -702,5 +702,66 @@ Supported query types are:
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
   (chatgpt-query query "gpt4o"))
 
+
+(defun chatgpt-format-file-name (file)
+  "Format FILE name with proper face and properties."
+  (if (file-directory-p file)
+      (propertize file
+                  'face 'diredfl-dir-name  ; using dired's directory face
+                  'full-path file)
+    file))
+
+(defun chatgpt-get-git-root ()
+  "Return the root directory of the current Git repository, or nil if not in a Git repo."
+  (when-let ((git-root (locate-dominating-file default-directory ".git")))
+    (expand-file-name git-root)))
+
+(defun chatgpt-list-files (directory)
+  "List all files and folders in DIRECTORY, including hidden files."
+  (directory-files directory t ".*" t)) ;; Include hidden files
+
+(defun chatgpt-select-file-or-folder (type)
+  "Select a file or folder interactively.
+- @ expects a file.
+- # expects a folder.
+- $ inserts @project."
+  (let* ((base-dir (cond
+                    ((equal type "@") default-directory)
+                    ((equal type "#") default-directory)
+                    ((equal type "$") (or (chatgpt-get-git-root)
+                                        (user-error "Not inside a Git repository")))))
+         (files (chatgpt-list-files base-dir))
+         (formatted-files (mapcar #'chatgpt-format-file-name files))
+         (selected (completing-read "Choose a file or folder: "
+                                  (lambda (string pred action)
+                                    (if (eq action 'metadata)
+                                        '(metadata (category . chatgpt-files))
+                                      (complete-with-action
+                                       action formatted-files string pred)))
+                                  nil t)))
+
+    (cond
+     ((equal type "$") "@project")  ;; Ensure $ is replaced with @project
+     ((and (equal type "@") (file-regular-p selected))
+      (format "@[[%s]]" selected)) ;; Return formatted file path
+     ((and (equal type "#") (file-directory-p selected))
+      (format "#[[%s]]" selected)) ;; Return formatted folder path
+     (t
+      (minibuffer-message "⚠️ Invalid selection. Expected %s." (if (equal type "@") "a file" "a folder"))
+      nil)))) ;; Return nil if invalid selection
+
+(defun chatgpt-insert-path ()
+  "Detect @, #, or $ in the minibuffer and trigger file/folder/Git root selection,
+ensuring correct format and preventing duplicate insertion."
+  (when (minibufferp)  ;; Only run in minibuffer
+    (let ((key (this-command-keys)))
+      (cond
+       ((equal key "@") (delete-char -1) (when-let ((result (chatgpt-select-file-or-folder "@"))) (insert result)))
+       ((equal key "#") (delete-char -1) (when-let ((result (chatgpt-select-file-or-folder "#"))) (insert result)))
+       ((equal key "$") (delete-char -1) (insert "@project")))))) ;; Replace $ with @project
+
+(add-hook 'minibuffer-setup-hook
+          (lambda () (add-hook 'post-self-insert-hook #'chatgpt-insert-path nil t))) ;; Local to minibuffer
+
 (provide 'chatgpt)
 ;;; chatgpt.el ends here
