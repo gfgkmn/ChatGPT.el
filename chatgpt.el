@@ -1,3 +1,4 @@
+  ;; switch chatllm-use-model between different model
 ;;; ;; -- lexical-binding: t --
 ;;; chatgpt.el --- ChatGPT in Emacs
 
@@ -446,17 +447,19 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 
   (setq chatgpt-check-running-flag nil)
 
+  (let* ((excluded-models '(chatgpt-last-use-model))
+         (filtered-choices (cl-set-difference chatgpt-ai-choices
+                                               excluded-models
+                                               :test #'string=))
+          (model (ivy-read "Choose model: " filtered-choices)))
   (progn
     (with-current-buffer chatgpt-last-use-buffer
       (save-excursion
         (goto-char chatgpt-last-response)
         (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
         ;; (delete-region chatgpt-last-response (point-max)))))
-        (delete-region (point) (point-max)))))
-
-  (if (string= chatgpt-last-use-model "perplexity")
-      (chatgpt--query-stream chatgpt-last-query "gpt4o" nil chatgpt-last-use-buffer t)
-    (chatgpt--query-stream chatgpt-last-query "perplexity" nil chatgpt-last-use-buffer t)))
+        (delete-region (point) (point-max))))
+    (chatgpt--query-stream chatgpt-last-query model nil chatgpt-last-use-buffer t))))
 
 
 ;;;###autoload
@@ -666,14 +669,14 @@ Supported query types are:
 
 
 ;;;###autoload
-(defun chatgpt-query-stream-gpt4 (query)
+(defun chatgpt-query-stream-default (query)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
   (chatgpt-query-stream query chatgpt-default-model))
 
 ;;;###autoload
-(defun chatgpt-query-stream-gpt35 (query)
+(defun chatgpt-query-stream-second-preferest (query)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
