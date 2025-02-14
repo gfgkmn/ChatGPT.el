@@ -1,4 +1,3 @@
-  ;; switch chatllm-use-model between different model
 ;;; ;; -- lexical-binding: t --
 ;;; chatgpt.el --- ChatGPT in Emacs
 
@@ -432,7 +431,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 
 ;;;###autoload
 (defun chatgpt-reask ()
-  ;; switch chatgpt-use-model between gpt35 and gpt4
+  ;; switch chatgpt-use-model between different model
   ;; but with save conversation history
   (interactive)
   (setq chatgpt-check-running-flag t)
@@ -449,17 +448,17 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 
   (let* ((excluded-models '(chatgpt-last-use-model))
          (filtered-choices (cl-set-difference chatgpt-ai-choices
-                                               excluded-models
-                                               :test #'string=))
-          (model (ivy-read "Choose model: " filtered-choices)))
-  (progn
-    (with-current-buffer chatgpt-last-use-buffer
-      (save-excursion
-        (goto-char chatgpt-last-response)
-        (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
-        ;; (delete-region chatgpt-last-response (point-max)))))
-        (delete-region (point) (point-max))))
-    (chatgpt--query-stream chatgpt-last-query model nil chatgpt-last-use-buffer t))))
+                                              excluded-models
+                                              :test #'string=))
+         (model (ivy-read "Choose model: " filtered-choices)))
+    (progn
+      (with-current-buffer chatgpt-last-use-buffer
+        (save-excursion
+          (goto-char chatgpt-last-response)
+          (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+          ;; (delete-region chatgpt-last-response (point-max)))))
+          (delete-region (point) (point-max))))
+      (chatgpt--query-stream chatgpt-last-query model nil chatgpt-last-use-buffer t))))
 
 
 ;;;###autoload
@@ -705,6 +704,133 @@ Supported query types are:
                        (read-from-minibuffer "ChatGPT Stream Query: "))))
   (chatgpt-query query "gpt4o"))
 
+(defun chatgpt-apply-region-diff-to-buffer (start end)
+  "Apply a unified diff from the selected region to another buffer in the same window.
+Follows strict line ordering, tracks first change position, and ensures undo correctness.
+Additionally, ignores the (wrong) hunk-header line numbers, instead searching the next remove/context/add line in the target buffer to anchor changes."
+  (interactive "r")
+  (let ((diff-buffer (current-buffer))
+        (target-buffer nil)
+        (lines nil)
+        (first-change-pos nil)
+        (success t)
+        ;; We'll store a line-number-like variable but won't use it
+        ;; because the hunk header info is said to be wrong:
+        (current-line nil))  ;; Tracks "wanted" line number from hunk-header (not actually used).
+
+    ;; Find the target buffer in the same window
+    (dolist (win (window-list))
+      (let ((buf (window-buffer win)))
+        (unless (eq buf diff-buffer)
+          (setq target-buffer buf))))
+
+    (unless target-buffer
+      (error "No other buffer found in the same window to apply diff"))
+
+    ;; Parse the diff content
+    (save-excursion
+      (goto-char start)
+      (while (< (point) end)
+        (let ((line (buffer-substring-no-properties
+                     (line-beginning-position)
+                     (line-end-position))))
+          (cond
+           ;; Ignore file metadata lines (--- and +++)
+           ((or (string-prefix-p "+++" line)
+                (string-prefix-p "---" line))
+            nil)
+
+           ;; Extract @@ hunk header information
+           ((string-match "^@@ -\\([0-9]+\\),?\\([0-9]*\\) \\+\\([0-9]+\\),?\\([0-9]*\\) @@" line)
+            ;; We'll store the new-file line number, but won't rely on it for movement:
+            (setq current-line (string-to-number (match-string 3 line)))
+            (push (cons 'hunk-header current-line) lines))
+
+           ;; Actual diff content lines
+           (t
+            (push (cons (cond ((string-prefix-p "-" line) 'remove)
+                              ((string-prefix-p "+" line) 'add)
+                              (t 'context))
+                        (substring line 1))
+                  lines))))
+        (forward-line 1)))
+
+    ;; Reverse to preserve the original top-to-bottom order
+    (setq lines (reverse lines))
+
+    ;; Apply changes to the target buffer
+    (with-current-buffer target-buffer
+      (undo-boundary)
+      (save-excursion
+        (dolist (hunk lines)
+          (cond
+           ((eq (car hunk) 'hunk-header)
+            ;; The cdr is the new-file line number, but we won't use it.
+            ;; Instead, we look ahead in the diff lines for the next
+            ;; remove/context/add line to anchor our position.
+            (let* ((lines-after-this (cdr (memq hunk lines))) ;; everything after THIS hunk in `lines`
+                   (anchor
+                    (cl-find-if
+                     (lambda (l)
+                       (memq (car l) '(remove context add)))
+                     lines-after-this)))
+              (when anchor
+                (goto-char (point-min))
+                (let ((anchor-text (cdr anchor)))
+                  ;; If the anchor line is not found, we error out.
+                  (unless (search-forward anchor-text nil t)
+                    (error "Cannot find anchor text for hunk: %S" anchor-text))
+                  (beginning-of-line)))))
+
+           ((eq (car hunk) 'remove)
+            (let ((expected-line (cdr hunk))
+                  (actual-line (buffer-substring-no-properties
+                                (line-beginning-position)
+                                (line-end-position))))
+              (if (string= expected-line actual-line)
+                  (progn
+                    (unless first-change-pos (setq first-change-pos (point)))
+                    (delete-region (line-beginning-position) (line-end-position))
+                    (when (not (eobp))
+                      (delete-char 1))) ;; remove the newline if not end-of-buffer
+                (error "Error: Expected line for removal not found.\nExpected: %S\nFound:    %S"
+                       expected-line actual-line))))
+
+           ((eq (car hunk) 'add)
+            (unless first-change-pos (setq first-change-pos (point)))
+            (insert (cdr hunk) "\n"))
+
+           ((eq (car hunk) 'context)
+            (let ((expected-line (cdr hunk))
+                  (actual-line (buffer-substring-no-properties
+                                (line-beginning-position)
+                                (line-end-position))))
+              (unless (string= expected-line actual-line)
+                ;; Log mismatch for debugging
+                (with-current-buffer (get-buffer-create "*Diff Mismatch Log*")
+                  (goto-char (point-max))
+                  (insert (format "Context mismatch!\nExpected: %s\nFound:    %s\n\n"
+                                  expected-line actual-line)))
+                (error "Context mismatch.\nExpected: %S\nFound:    %S"
+                       expected-line actual-line))
+              (forward-line 1)))))
+      ;; After applying all hunks:
+
+      ;; Move cursor to the first modified position
+      (when first-change-pos
+        (goto-char first-change-pos))
+
+      (undo-boundary)
+
+      ;; If you use Evil mode, refresh cursor
+      (when (bound-and-true-p evil-mode)
+        (evil-normal-state)
+        (evil-refresh-cursor)))
+
+    (if success
+        (message "Diff applied successfully to %s (cursor moved to first change)"
+                 (buffer-name target-buffer))
+      (message "Diff application aborted due to errors.")))))
 
 (defun chatgpt-format-file-name (file)
   "Format FILE name with proper face and properties."
