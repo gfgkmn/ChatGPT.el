@@ -69,6 +69,9 @@
   :type 'string
   :group 'chatgpt)
 
+(defvar chatgpt--in-query-minibuffer nil
+  "Flag to indicate if we're currently in a ChatGPT query minibuffer.")
+
 (defvar chatgpt-process nil
   "The ChatGPT process.")
 
@@ -422,7 +425,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 \(defun square (x) (* x x))\""
   (if (equal query-type "custom")
       (chatgpt--query
-       (format "%s\n\n%s" (read-from-minibuffer "ChatGPT Custom Prompt: ") query) use-model)
+       (format "%s\n\n%s" (chatgpt-read-query "ChatGPT Custom Prompt: ") query) use-model)
     (if-let (format-string (cdr (assoc query-type chatgpt-query-format-string-map)))
         (chatgpt--query
          (format format-string query) use-model)
@@ -589,7 +592,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 (defun chatgpt--query-by-type-stream (query query-type use-model)
   (if (equal query-type "custom")
       (chatgpt--query-stream
-       (format "%s\n\n%s" (read-from-minibuffer "ChatGPT Custom Prompt: ") query) use-model)
+       (format "%s\n\n%s" (chatgpt-read-query "ChatGPT Custom Prompt: ") query) use-model)
     (if-let (format-string (cdr (assoc query-type chatgpt-query-format-string-map)))
         (chatgpt--query-stream
          (format format-string query) use-model)
@@ -608,7 +611,7 @@ returns the response."
                                         ; TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Query: "))
+                       (chatgpt-read-query "ChatGPT Query: "))
                      (read-string "GPT model: " chatgpt-default-model)))
   (let* ((query-type (completing-read "Type of Query: " (cons "custom" (mapcar #'car chatgpt-query-format-string-map)))))
     (if (or (assoc query-type chatgpt-query-format-string-map)
@@ -633,7 +636,7 @@ Supported query types are:
                                         ;TODO
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Query: "))
+                       (chatgpt-read-query "ChatGPT Query: "))
                      (read-string "GPT model: " chatgpt-default-model)))
   ;; (if chatgpt-waiting-dot-timer
   ;;     (message "Already waiting on a ChatGPT query. If there was an error with your previous query, try M-x chatgpt-reset")
@@ -648,7 +651,7 @@ Supported query types are:
 (defun chatgpt-query-by-type-stream (query use-model)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Stream Query: "))
+                       (chatgpt-read-query "ChatGPT Stream Query: "))
                      (read-string "GPT model: " chatgpt-default-model)))
   (let* ((query-type (completing-read "Type of Stream Query: " (cons "custom" (mapcar #'car chatgpt-query-format-string-map)))))
     (if (or (assoc query-type chatgpt-query-format-string-map)
@@ -660,7 +663,7 @@ Supported query types are:
 (defun chatgpt-query-stream (query use-model)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Stream Query: "))
+                       (chatgpt-read-query "ChatGPT Stream Query: "))
                      (unless use-model (read-string "GPT model: " chatgpt-default-model))))
   (if (region-active-p)
       (chatgpt-query-by-type-stream query use-model)
@@ -671,14 +674,14 @@ Supported query types are:
 (defun chatgpt-query-stream-default (query)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+                       (chatgpt-read-query "ChatGPT Stream Query: "))))
   (chatgpt-query-stream query chatgpt-default-model))
 
 ;;;###autoload
 (defun chatgpt-query-stream-second-preferest (query)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Stream Query: "))))
+                       (chatgpt-read-query "ChatGPT Stream Query: "))))
   (chatgpt-query-stream query chatgpt-second-preferest-model))
 
 
@@ -688,7 +691,7 @@ Supported query types are:
    (list
     (if (region-active-p)
         (buffer-substring-no-properties (region-beginning) (region-end))
-      (read-from-minibuffer "ChatGPT Stream Query: "))
+      (chatgpt-read-query "ChatGPT Stream Query: "))
     nil))  ; Default choice to nil when called interactively
   (let ((model (or choice
                    (let ((choices chatgpt-ai-choices))
@@ -698,11 +701,11 @@ Supported query types are:
 
 
 ;;;###autoload
-(defun chatgpt-query-gpt4o (query)
+(defun chatgpt-query-default (query)
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
-                       (read-from-minibuffer "ChatGPT Stream Query: "))))
-  (chatgpt-query query "gpt4o"))
+                       (chatgpt-read-query "ChatGPT Stream Query: "))))
+  (chatgpt-query query chatgpt-default-model))
 
 (defun chatgpt-apply-region-diff-to-buffer (start end)
   "Apply a unified diff from the selected region to another buffer in the same window.
@@ -889,8 +892,25 @@ ensuring correct format and preventing duplicate insertion."
        ((equal key "#") (delete-char -1) (when-let ((result (chatgpt-select-file-or-folder "#"))) (insert result)))
        ((equal key "$") (delete-char -1) (insert "@project")))))) ;; Replace $ with @project
 
-(add-hook 'minibuffer-setup-hook
-          (lambda () (add-hook 'post-self-insert-hook #'chatgpt-insert-path nil t))) ;; Local to minibuffer
+
+(defun chatgpt-read-query (prompt)
+  "Read a ChatGPT query with path insertion support."
+  (let ((chatgpt--in-query-minibuffer t))
+    (read-from-minibuffer prompt)))
+
+(defun chatgpt-setup-path-insertion ()
+  "Setup path insertion only for ChatGPT query minibuffers."
+  (when chatgpt--in-query-minibuffer
+    (add-hook 'post-self-insert-hook #'chatgpt-insert-path nil t)))
+
+(defun chatgpt-cleanup-path-insertion ()
+  "Clean up path insertion hook after minibuffer use."
+  (when chatgpt--in-query-minibuffer
+    (remove-hook 'post-self-insert-hook #'chatgpt-insert-path t)))
+
+;; Add both setup and cleanup hooks
+(add-hook 'minibuffer-setup-hook #'chatgpt-setup-path-insertion)
+(add-hook 'minibuffer-exit-hook #'chatgpt-cleanup-path-insertion)
 
 (provide 'chatgpt)
 ;;; chatgpt.el ends here

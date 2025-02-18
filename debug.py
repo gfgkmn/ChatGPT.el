@@ -20,7 +20,7 @@ client = EPCClient((host, port))
 
 # Define test parameters
 # botname = "harrison"  # Replace with your bot's name in chatgptel.json
-botname = "dsr1"  # Replace with your bot's name in chatgptel.json
+botname = "lispgpt"  # Replace with your bot's name in chatgptel.json
 query_text = "Hello! How are you doing today?"
 
 # Test the `query` function
