@@ -675,7 +675,10 @@ Supported query types are:
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (chatgpt-read-query "ChatGPT Stream Query: "))))
-  (chatgpt-query-stream query chatgpt-default-model))
+  (chatgpt-query-stream query
+                       (if (null chatgpt-last-use-model)
+                           chatgpt-default-model
+                         chatgpt-last-use-model)))
 
 ;;;###autoload
 (defun chatgpt-query-stream-second-preferest (query)
