@@ -8,7 +8,7 @@ import re
 import textwrap
 
 from epc.server import EPCServer
-from revChatGPT.V3 import Chatbot
+from chatgpt_v3 import Chatbot
 
 server = EPCServer(('localhost', 0))
 
