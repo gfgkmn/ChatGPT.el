@@ -1,14 +1,14 @@
 # chatgpt.py
 import copy
+import glob
 import json
 import os
-import traceback
-import glob
 import re
 import textwrap
+import traceback
 
-from epc.server import EPCServer
 from chatgpt_v3 import Chatbot
+from epc.server import EPCServer
 
 server = EPCServer(('localhost', 0))
 
@@ -19,6 +19,14 @@ bots = json.load(open(configpath, 'r'))
 stream_reply = {}
 conversations = {}
 
+
+@server.register_function
+def clear_streams():
+    global stream_reply
+    stream_reply = {}
+    return True
+
+
 def format_display_files(display_files, width=90):
     """Formats the display_files string to fit within the given width."""
     if not display_files.strip():
@@ -28,9 +36,11 @@ def format_display_files(display_files, width=90):
     formatted_files = textwrap.fill(display_files, width=width)
     return f"{header}\n{formatted_files}\n{'-' * width}\n"
 
+
 def is_valid_file_path(path):
     """Check if the path is a valid file (not a directory) and exists."""
     return os.path.isfile(path)
+
 
 def is_valid_folder_path(path):
     """Check if the path is a valid directory and exists."""
@@ -42,6 +52,7 @@ def get_git_root():
     git_root = os.popen("git rev-parse --show-toplevel 2>/dev/null").read().strip()
     return git_root if os.path.isdir(git_root) else None
 
+
 def extract_valid_path(text, path_checker):
     """Extracts a valid file/folder path from within @[[path]] or #[[path]]"""
     match = re.match(r"\[\[([^\]]+)\]\]", text)  # Extract path inside [[ ]]
@@ -51,10 +62,12 @@ def extract_valid_path(text, path_checker):
             return path
     return None
 
+
 def read_file_content(file_path):
     """Reads file content safely."""
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
+
 
 def get_files_from_folder(folder_path, extensions=[".py", ".json", ".md"]):
     """Gets all files within a folder that match the specified extensions."""
@@ -62,6 +75,7 @@ def get_files_from_folder(folder_path, extensions=[".py", ".json", ".md"]):
     for ext in extensions:
         files.extend(glob.glob(os.path.join(folder_path, f"**/*{ext}"), recursive=True))
     return files
+
 
 def process_syntax(query):
     """Extracts @[[file]], #[[folder]], and @project content while modifying the query."""
@@ -111,6 +125,7 @@ def process_syntax(query):
 
     return query, format_display_files(display_files)
 
+
 @server.register_function
 def query(query, botname, convo_id='default'):
     global bots
@@ -123,10 +138,12 @@ def query(query, botname, convo_id='default'):
             bots[botname]["identity"].reset(convo_id=convo_id)
 
         query, display_files = process_syntax(query)
-        return display_files + bots[botname]["identity"].ask(query, convo_id=convo_id, **bots[botname]["gen_setting"])
+        return display_files + bots[botname]["identity"].ask(
+            query, convo_id=convo_id, **bots[botname]["gen_setting"])
 
     except Exception:
         return traceback.format_exc()
+
 
 @server.register_function
 def querystream(query_with_id, botname, reuse, convo_id='default'):
@@ -146,7 +163,8 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
 
             if reuse:
                 assert convo_id in conversations
-                if bots[botname]["identity"].conversation[convo_id][-1]['role'] == "assistant":
+                if bots[botname]["identity"].conversation[convo_id][-1][
+                        'role'] == "assistant":
                     bots[botname]["identity"].rollback(2, convo_id=convo_id)
                 else:
                     bots[botname]["identity"].rollback(1, convo_id=convo_id)
@@ -167,6 +185,7 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
         return {"type": 0, "message": None}
     except Exception as e:
         return {"type": 1, "message": f"Exception: {str(e)}\n{traceback.format_exc()}"}
+
 
 # port = server.server_address[1]  # Get the port number
 # with open("epc_port.txt", "w") as f:

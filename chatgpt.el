@@ -168,9 +168,18 @@ This function retrieves and displays the port number of the running EPC server."
   (interactive)
   (dolist (id (hash-table-keys chatgpt-wait-timers))
     (chatgpt--stop-wait id))
-  (epc:stop-epc chatgpt-process)
-  (setq chatgpt-process nil)
-  (setq chatgpt-running-flag nil)
+  (when chatgpt-process
+    (epc:call-deferred chatgpt-process 'clear_streams (list))
+    (epc:stop-epc chatgpt-process)
+    (setq chatgpt-process nil))
+
+  (setq chatgpt-check-running-flag t)
+  ;; wait until chatgpt-check-running-flag is nil
+  (if chatgpt-running-flag
+      (progn
+        (message "ChatGPT is running. Please wait until it finishes.")
+        (while chatgpt-check-running-flag
+          (sleep-for 0.1))))
   (setq chatgpt-check-running-flag nil)
   (message "Stop ChatGPT process."))
 
@@ -497,6 +506,10 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
   (unless chatgpt-process
     (chatgpt-init))
 
+  (when (and chatgpt-running-flag (not recursive))
+    (message "ChatGPT is running. Please try again after it completes or use chatgpt-stop first.")
+    (return-from chatgpt--query-stream nil))
+
   ;; (message "DEBUG: query=%s, use-model=%s, recursive=%s, use-buffer-name=%s, reuse=%s"
   ;;          query use-model recursive use-buffer-name reuse)
   (if recursive
@@ -557,7 +570,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                                           (setq next-recursive (point)))
                                       (progn  ; End of stream
                                         (insert (format "\n\n%s"
-                                                      (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
+                                                        (make-string (chatgpt-get-buffer-width-by-char ?=) ?=)))
                                         (goto-char (point-max))
                                         (let ((output-window (get-buffer-window (current-buffer))))
                                           (when output-window
@@ -887,16 +900,27 @@ Additionally, ignores the (wrong) hunk-header line numbers, instead searching th
       (minibuffer-message "⚠️ Invalid selection. Expected %s." (if (equal type "@") "a file" "a folder"))
       nil)))) ;; Return nil if invalid selection
 
-(defun chatgpt-insert-path ()
-  "Detect @, #, or $ in the minibuffer and trigger file/folder/Git root selection,
-ensuring correct format and preventing duplicate insertion."
-  (when (minibufferp)  ;; Only run in minibuffer
-    (let ((key (this-command-keys)))
-      (cond
-       ((equal key "@") (delete-char -1) (when-let ((result (chatgpt-select-file-or-folder "@"))) (insert result)))
-       ((equal key "#") (delete-char -1) (when-let ((result (chatgpt-select-file-or-folder "#"))) (insert result)))
-       ((equal key "$") (delete-char -1) (insert "@project")))))) ;; Replace $ with @project
+(defvar chatgpt-last-special-char-time 0
+  "Timestamp of the last special character (@, #, $) insertion.")
 
+ (defun chatgpt-insert-path ()
+   "Detect @, #, or $ in the minibuffer and trigger file/folder/Git root selection,
+ensuring correct format and preventing duplicate insertion.
+Rapidly typing the same character twice (within 0.3 seconds) will insert it literally."
+   (when (minibufferp)  ;; Only run in minibuffer
+     (let ((key (this-command-keys)))
+      ;; Get current time
+      (let ((current-time (float-time)))
+        ;; Check if the character was typed very quickly after the last one (double-tap)
+        (if (member key '("@" "#" "$"))
+            (if (< (- current-time chatgpt-last-special-char-time) 0.3)
+                (progn
+                  (setq chatgpt-last-special-char-time 0) ;; Reset timer
+                  (cond
+                   ((equal key "@") (delete-char -2) (when-let ((result (chatgpt-select-file-or-folder "@"))) (insert result)))
+                   ((equal key "#") (delete-char -2) (when-let ((result (chatgpt-select-file-or-folder "#"))) (insert result)))
+                   ((equal key "$") (delete-char -2) (insert "@project"))))
+              (setq chatgpt-last-special-char-time current-time)))))))
 
 (defun chatgpt-read-query (prompt)
   "Read a ChatGPT query with path insertion support."
