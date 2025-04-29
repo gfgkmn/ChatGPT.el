@@ -49,6 +49,36 @@ except Exception as e:
     error_message = traceback.format_exc()
     print("Error in `querystream` test:", error_message)
 
+
+# query_text = "how to quicksort a array"
+
+# # Test the `query` function
+# print("Testing `query` function...")
+# response = client.call_sync('query', [query_text, botname])
+# print("Response:", response)
+
+# # Test the `querystream` function
+# print("\nTesting `querystream` function...")
+
+# try:
+#     # (org-id-uuid)
+#     # emacs org-id-uuid function for python
+#     query_with_id = "dddae2ef-69df-4f94-a3e6-85cbca10785d"
+#     query_with_id = f"{query_with_id}-{query_text}"
+#     response_stream = []
+#     while True:
+#         reply = client.call_sync('querystream', [query_with_id, botname, False])
+#         if reply[3] == []:
+#             break
+#         elif reply[1] == 1:
+#             raise Exception("Error in `querystream` test:", reply[3])
+#         response_stream.append(reply[3])
+#         print("Streamed Reply:", reply[3])
+#     print("Complete Streamed Response:", "".join(response_stream))
+# except Exception as e:
+#     error_message = traceback.format_exc()
+#     print("Error in `querystream` test:", error_message)
+
 # Close the client
 client.close()
 
