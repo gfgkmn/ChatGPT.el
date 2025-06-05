@@ -56,6 +56,15 @@
   :type 'string
   :group 'chatgpt)
 
+(defcustom chatgpt-initial-timeout 600
+  "Timeout in seconds for initial ChatGPT requests."
+  :type 'integer
+  :group 'chatgpt)
+
+(defcustom chatgpt-recursive-timeout 5
+  "Timeout in seconds for recursive ChatGPT requests."
+  :type 'integer
+  :group 'chatgpt)
 
 (defcustom chatgpt-ai-choices
   '("perplexity" "gpt4o" "lispgpt" "pythongpt" "qwen25" "claude" "dsr1")
@@ -166,22 +175,37 @@ This function retrieves and displays the port number of the running EPC server."
 (defun chatgpt-stop ()
   "Stops the ChatGPT server."
   (interactive)
+  ;; Stop all wait timers
   (dolist (id (hash-table-keys chatgpt-wait-timers))
     (chatgpt--stop-wait id))
-  (when chatgpt-process
-    (epc:call-deferred chatgpt-process 'clear_streams (list))
-    (epc:stop-epc chatgpt-process)
-    (setq chatgpt-process nil))
 
+  ;; Signal that we want to stop
   (setq chatgpt-check-running-flag t)
-  ;; wait until chatgpt-check-running-flag is nil
+
+  ;; If ChatGPT is running, schedule the cleanup for later
   (if chatgpt-running-flag
       (progn
-        (message "ChatGPT is running. Please wait until it finishes.")
-        (while chatgpt-check-running-flag
-          (sleep-for 0.1))))
-  (setq chatgpt-check-running-flag nil)
-  (message "Stop ChatGPT process."))
+        (message "ChatGPT is running. Stopping gracefully...")
+        ;; Use a timer to check periodically without blocking
+        (run-with-timer 0.1 0.1
+                        (lambda ()
+                          (unless chatgpt-running-flag
+                            ;; Cancel this timer
+                            (cancel-timer (car (last timer-list)))
+                            ;; Now do the cleanup
+                            (when chatgpt-process
+                              (epc:call-deferred chatgpt-process 'clear_streams (list))
+                              (epc:stop-epc chatgpt-process)
+                              (setq chatgpt-process nil))
+                            (setq chatgpt-check-running-flag nil)
+                            (message "ChatGPT process stopped.")))))
+    ;; If not running, stop immediately
+    (when chatgpt-process
+      (epc:call-deferred chatgpt-process 'clear_streams (list))
+      (epc:stop-epc chatgpt-process)
+      (setq chatgpt-process nil))
+    (setq chatgpt-check-running-flag nil)
+    (message "ChatGPT process stopped.")))
 
 ;;;###autoload
 (defun chatgpt-reset ()
@@ -444,65 +468,65 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 
 
 ;;;###autoload
+(defun chatgpt-wait-and-execute (callback)
+  "Wait for ChatGPT to finish if running, then execute CALLBACK."
+  (if chatgpt-running-flag
+      (progn
+        (message "ChatGPT is running. Waiting for it to finish...")
+        (run-with-timer
+         0.1 0.1
+         (lambda ()
+           (unless chatgpt-running-flag
+             ;; Cancel this timer
+             (cancel-timer (car (last timer-list)))
+             (funcall callback)))))
+    ;; If not running, execute immediately
+    (funcall callback)))
+
+;;;###autoload
 (defun chatgpt-reask ()
-  ;; switch chatgpt-use-model between different model
-  ;; but with save conversation history
+  "Switch chatgpt-use-model between different models with saved conversation history."
   (interactive)
   (setq chatgpt-check-running-flag t)
   (message chatgpt-last-use-model)
   (message (buffer-name chatgpt-last-use-buffer))
-  ;; wait until chatgpt-check-running-flag is nil
-  (if chatgpt-running-flag
-      (progn
-        (message "ChatGPT is running. Please wait until it finishes.")
-        (while chatgpt-check-running-flag
-          (sleep-for 0.1))))
 
-  (setq chatgpt-check-running-flag nil)
-
-  (let* ((excluded-models '(chatgpt-last-use-model))
-         (filtered-choices (cl-set-difference chatgpt-ai-choices
-                                              excluded-models
-                                              :test #'string=))
-         (model (ivy-read "Choose model: " filtered-choices)))
-    (progn
-      (with-current-buffer chatgpt-last-use-buffer
-        (save-excursion
-          (goto-char chatgpt-last-response)
-          (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
-          ;; (delete-region chatgpt-last-response (point-max)))))
-          (delete-region (point) (point-max))))
-      (chatgpt--query-stream chatgpt-last-query model nil chatgpt-last-use-buffer t))))
-
+  (chatgpt-wait-and-execute
+   (lambda ()
+     (setq chatgpt-check-running-flag nil)
+     (let* ((excluded-models '(chatgpt-last-use-model))
+            (filtered-choices (cl-set-difference chatgpt-ai-choices
+                                                 excluded-models
+                                                 :test #'string=))
+            (model (ivy-read "Choose model: " filtered-choices)))
+       (with-current-buffer chatgpt-last-use-buffer
+         (save-excursion
+           (goto-char chatgpt-last-response)
+           (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+           (delete-region (point) (point-max))))
+       (chatgpt--query-stream chatgpt-last-query model nil chatgpt-last-use-buffer t)))))
 
 ;;;###autoload
 (defun chatgpt-again ()
-  ;; switch chatgpt-use-model between gpt35 and gpt4
-  ;; but with save conversation history
+  "Repeat the last query with the same model."
   (interactive)
   (setq chatgpt-check-running-flag t)
   (message chatgpt-last-use-model)
   (message (buffer-name chatgpt-last-use-buffer))
-  ;; wait until chatgpt-check-running-flag is nil
-  (if chatgpt-running-flag
-      (progn
-        (message "ChatGPT is running. Please wait until it finishes.")
-        (while chatgpt-check-running-flag
-          (sleep-for 0.1))))
-  (setq chatgpt-check-running-flag nil)
 
-  (progn
-    (with-current-buffer chatgpt-last-use-buffer
-      (save-excursion
-        (goto-char chatgpt-last-response)
-        (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
-        ;; (delete-region chatgpt-last-response (point-max)))))
-        (delete-region (point) (point-max)))))
-
-  (chatgpt--query-stream chatgpt-last-query chatgpt-last-use-model nil chatgpt-last-use-buffer t))
+  (chatgpt-wait-and-execute
+   (lambda ()
+     (setq chatgpt-check-running-flag nil)
+     (with-current-buffer chatgpt-last-use-buffer
+       (save-excursion
+         (goto-char chatgpt-last-response)
+         (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+         (delete-region (point) (point-max))))
+     (chatgpt--query-stream chatgpt-last-query chatgpt-last-use-model nil chatgpt-last-use-buffer t))))
 
 
 (defun chatgpt--query-stream (query use-model &optional recursive use-buffer-name reuse)
+
   (unless chatgpt-process
     (chatgpt-init))
 
@@ -522,9 +546,8 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
       (setq chatgpt-last-query query)
       (setq chatgpt-last-use-buffer use-buffer-name)
       (setq chatgpt-last-use-model use-model)))
-  (lexical-let ((saved-id (if recursive
-                              chatgpt-id
-                            (cl-incf chatgpt-id)))
+
+  (lexical-let ((saved-id (if recursive chatgpt-id (cl-incf chatgpt-id)))
                 (query (if recursive
                            (string-join (nthcdr 5 (split-string query "-")) "-")
                          query))
@@ -533,9 +556,9 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                                  (format "%s-%s" (org-id-uuid) query)))
                 (recursive-model use-model)
                 (use-buffer-name use-buffer-name)
-                (reuse (if recursive
-                           nil
-                         reuse)))
+                (reuse (if recursive nil reuse))
+                (timeout-seconds (if recursive chatgpt-recursive-timeout chatgpt-initial-timeout))
+                (timeout-timer nil))
 
     (if recursive
         (setq next-recursive recursive)
@@ -543,16 +566,36 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         (setq next-recursive nil)
         (chatgpt--insert-query query saved-id use-model use-buffer-name)))
 
-
-    ;; (message "DEBUG: Calling EPC with query_with_id=%s, recursive-model=%s, reuse=%s, buffer-name=%s"
-    ;;          query_with_id recursive-model reuse (buffer-name use-buffer-name))
+    ;; Set timeout timer
+    (setq timeout-timer
+          (run-with-timer
+           timeout-seconds nil
+           `(lambda ()  ; Note the backtick for proper lexical capture
+              (with-current-buffer ,use-buffer-name
+                (save-excursion
+                  (condition-case nil
+                      (if (numberp next-recursive)
+                          (goto-char next-recursive)
+                        (chatgpt--goto-identifier ,saved-id ,use-buffer-name))
+                    (error nil))
+                  (insert (format "\n[Request timed out after %d seconds]\n" ,timeout-seconds))
+                  (unless ,recursive  ; Capture the recursive value at timer creation time
+                    (insert (format "\n%s" (make-string (chatgpt-get-buffer-width-by-char ?=) ?=))))
+                  (setq next-recursive nil)))
+              (setq chatgpt-running-flag nil))))
 
     (deferred:$
      (deferred:$
-      (epc:call-deferred chatgpt-process 'querystream (list query_with_id recursive-model reuse (buffer-name use-buffer-name)))
+      (epc:call-deferred chatgpt-process 'querystream
+                         (list query_with_id recursive-model reuse (buffer-name use-buffer-name)))
 
       (deferred:nextc it
                       #'(lambda (response)
+                          ;; Cancel timeout timer since we got a response
+                          (when timeout-timer
+                            (cancel-timer timeout-timer)
+                            (setq timeout-timer nil))
+
                           (with-current-buffer use-buffer-name
                             (save-excursion
                               (if (numberp next-recursive)
@@ -561,6 +604,9 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                               (if chatgpt-check-running-flag
                                   (progn
                                     (setq next-recursive nil)
+                                    (setq chatgpt-check-running-flag nil)
+                                    (setq chatgpt-running-flag nil)
+                                    (setq timeout-timer nil)
                                     (save-buffer))
                                 (if (= (plist-get response :type) 0)  ; Normal response
                                     (if (plist-get response :message) ; Check if message exists
@@ -585,12 +631,14 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                                     (setq next-recursive nil)
                                     (save-buffer))))))
                           (if next-recursive
-                              (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)
-                            (progn
-                              (setq chatgpt-check-running-flag nil)
-                              (setq chatgpt-running-flag nil))))))
+                              (chatgpt--query-stream query_with_id recursive-model next-recursive use-buffer-name)))))
      (deferred:error it
-                     `(lambda (err)
+                     (lambda (err)
+                        ;; Cancel timeout timer on error
+                        (when timeout-timer
+                          (cancel-timer timeout-timer)
+                          (setq timeout-timer nil))
+
                         (message "err is:%s" err)
                         (with-current-buffer ,use-buffer-name
                           (save-excursion
