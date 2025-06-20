@@ -187,8 +187,41 @@ def querystream(query_with_id, botname, reuse, convo_id='default'):
         return {"type": 1, "message": f"Exception: {str(e)}\n{traceback.format_exc()}"}
 
 
-# port = server.server_address[1]  # Get the port number
-# with open("epc_port.txt", "w") as f:
-#     f.write(str(port))
+@server.register_function
+def query_manager(query_with_id, botname, reuse, convo_id='default'):
+
+    # Initialize buffer storage if not exists
+    if not hasattr(query_manager, 'buffers'):
+        query_manager.buffers = {}
+    if not hasattr(query_manager, 'invoke_counts'):
+        query_manager.invoke_counts = {}
+
+    # Initialize buffer and reuse count for new query_id
+    if query_with_id not in query_manager.buffers:
+        query_manager.buffers[query_with_id] = []
+        query_manager.invoke_counts[query_with_id] = 0
+    elif query_manager.invoke_counts[query_with_id] < 0:
+        query_manager.buffers.pop(query_with_id, None)
+        query_manager.invoke_counts.pop(query_with_id, None)
+        return {"type": 0, "message": None}
+    else:
+        query_manager.invoke_counts[query_with_id] += 1
+
+    if query_manager.invoke_counts[query_with_id] < 30:
+        return querystream(query_with_id, botname, reuse, convo_id)
+    else:
+        current_return = querystream(query_with_id, botname, reuse, convo_id)
+        while current_return["type"] == 0 and current_return["message"] is not None:
+            query_manager.buffers[query_with_id].append(current_return["message"])
+            current_return = querystream(query_with_id, botname, reuse, convo_id)
+        if current_return["type"] == 1:
+            return current_return
+        else:
+            query_manager.invoke_counts[query_with_id] = -1
+            return {"type": 0, "message": "".join(query_manager.buffers[query_with_id])}
+
+port = server.server_address[1]  # Get the port number
+with open("epc_port.txt", "w") as f:
+    f.write(str(port))
 server.print_port()
 server.serve_forever()

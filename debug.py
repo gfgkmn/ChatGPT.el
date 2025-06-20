@@ -21,36 +21,9 @@ client = EPCClient((host, port))
 # Define test parameters
 # botname = "harrison"  # Replace with your bot's name in chatgptel.json
 botname = "claude"  # Replace with your bot's name in chatgptel.json
-query_text = "Hello! How are you doing today?"
-
-# Test the `query` function
-print("Testing `query` function...")
-response = client.call_sync('query', [query_text, botname])
-print("Response:", response)
-
-# Test the `querystream` function
-print("\nTesting `querystream` function...")
-
-try:
-    # emacs org-id-uuid function for python
-    query_with_id = "b7e8d0b0-1c6b-4c7e-bf6d-4b7b6d4e8c4e"
-    query_with_id = f"{query_with_id}-{query_text}"
-    response_stream = []
-    while True:
-        reply = client.call_sync('querystream', [query_with_id, botname, False])
-        if reply[3] == []:
-            break
-        elif reply[1] == 1:
-            raise Exception("Error in `querystream` test:", reply[3])
-        response_stream.append(reply[3])
-        print("Streamed Reply:", reply[3])
-    print("Complete Streamed Response:", "".join(response_stream))
-except Exception as e:
-    error_message = traceback.format_exc()
-    print("Error in `querystream` test:", error_message)
 
 
-# query_text = "how to quicksort a array"
+# query_text = "Hello! How are you doing today?"
 
 # # Test the `query` function
 # print("Testing `query` function...")
@@ -61,9 +34,8 @@ except Exception as e:
 # print("\nTesting `querystream` function...")
 
 # try:
-#     # (org-id-uuid)
 #     # emacs org-id-uuid function for python
-#     query_with_id = "dddae2ef-69df-4f94-a3e6-85cbca10785d"
+#     query_with_id = "b7e8d0b0-1c6b-4c7e-bf6d-4b7b6d4e8c4e"
 #     query_with_id = f"{query_with_id}-{query_text}"
 #     response_stream = []
 #     while True:
@@ -78,6 +50,36 @@ except Exception as e:
 # except Exception as e:
 #     error_message = traceback.format_exc()
 #     print("Error in `querystream` test:", error_message)
+
+
+query_text = "how to quicksort a array"
+
+# # Test the `query` function
+# print("Testing `query` function...")
+# response = client.call_sync('query', [query_text, botname])
+# print("Response:", response)
+
+# Test the `query_manager` function
+print("\nTesting `query_manager` function...")
+
+try:
+    # (org-id-uuid)
+    # emacs org-id-uuid function for python
+    query_with_id = "dddae2ef-69df-4f94-a3e6-85cbca10785d"
+    query_with_id = f"{query_with_id}-{query_text}"
+    response_stream = []
+    while True:
+        reply = client.call_sync('query_manager', [query_with_id, botname, False])
+        if reply[3] == []:
+            break
+        elif reply[1] == 1:
+            raise Exception("Error in `query_manager` test:", reply[3])
+        response_stream.append(reply[3])
+        print("Streamed Reply:", reply[3])
+    print("Complete Streamed Response:", "".join(response_stream))
+except Exception as e:
+    error_message = traceback.format_exc()
+    print("Error in `query_manager` test:", error_message)
 
 # Close the client
 client.close()

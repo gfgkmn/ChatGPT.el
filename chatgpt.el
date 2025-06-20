@@ -535,7 +535,8 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 
     (deferred:$
      (deferred:$
-      (epc:call-deferred chatgpt-process 'querystream
+      ;; (epc:call-deferred chatgpt-process 'querystream
+      (epc:call-deferred chatgpt-process 'query_manager
                          (list query_with_id recursive-model reuse (buffer-name use-buffer-name)))
 
       (deferred:nextc it
