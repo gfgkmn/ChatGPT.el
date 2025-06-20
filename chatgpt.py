@@ -207,7 +207,7 @@ def query_manager(query_with_id, botname, reuse, convo_id='default'):
     else:
         query_manager.invoke_counts[query_with_id] += 1
 
-    if query_manager.invoke_counts[query_with_id] < 30:
+    if query_manager.invoke_counts[query_with_id] < 40:
         return querystream(query_with_id, botname, reuse, convo_id)
     else:
         current_return = querystream(query_with_id, botname, reuse, convo_id)
