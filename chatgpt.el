@@ -72,6 +72,14 @@
   :type '(repeat string)
   :group 'chatgpt)
 
+(defvar chatgpt-saved-region-start-line nil
+  "The start line of the saved region.")
+
+(defvar chatgpt-saved-region-end-line nil
+  "The end line of the saved region.")
+
+(defvar chatgpt-saved-region-buffer nil
+  "The buffer where the saved region is located.")
 
 (defcustom chatgpt-second-preferest-model "perplexity"
   "Chatgpt buffer name"
@@ -194,21 +202,29 @@ This function retrieves and displays the port number of the running EPC server."
   "Displays *ChatGPT*."
   (interactive)
 
-  (unless output-buffer
-    (setq output-buffer (chatgpt-get-output-buffer-name))
-    (display-buffer output-buffer)) ; 创建或获取缓冲区
-                                        ; 显示缓冲区
+  (if output-buffer
+      (setq chatgpt-save-cursor nil)
+    (progn
+      (setq output-buffer (chatgpt-get-output-buffer-name))
+      (display-buffer output-buffer)
+      (setq chatgpt-save-cursor 1)))
   (when-let ((saved-win (get-buffer-window (current-buffer)))
              (win (get-buffer-window output-buffer)))
     (unless (equal (current-buffer) output-buffer)
       (select-window win)
       (if (not (eq major-mode 'markdown-mode))
           (markdown-mode))
-      (save-excursion
-        (goto-char (point-max))
-        (unless (pos-visible-in-window-p (point-max) win)
+      (if chatgpt-save-cursor
+          (progn
+            (goto-char (point-max))
+            (unless (pos-visible-in-window-p (point-max) win)
+              (goto-char (point-max))
+              (recenter -1)))
+        (save-excursion
           (goto-char (point-max))
-          (recenter -1)))
+          (unless (pos-visible-in-window-p (point-max) win)
+            (goto-char (point-max))
+            (recenter -1))))
       (select-window saved-win)))
   (get-buffer output-buffer))
 
@@ -265,25 +281,25 @@ This function retrieves and displays the port number of the running EPC server."
   (unless output-buffer
     (setq output-buffer (chatgpt-get-output-buffer-name))) ; 创建或获取缓冲区
   (with-current-buffer output-buffer
-    (save-excursion
-      (goto-char (point-max))
-      (with-selected-window (get-buffer-window output-buffer)
-        (recenter 0))
-      (let ((inhibit-read-only t))
-        (setq chatgpt-last-response (point))
-        (insert (format "%s %s >>> %s\n%s\n%s\n%s"
-                        (if (= (point-min) (point))
-                            "\n"
-                          "\n\n")
-                        model-name
-                        (propertize query 'face 'bold)
-                        (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
-                        (propertize
-                         (chatgpt--identifier-string id)
-                         'invisible t)
-                        (if chatgpt-enable-loading-ellipsis
-                            ""
-                          (concat "Waiting for ChatGPT..."))))))))
+    (goto-char (point-max))
+    (with-selected-window (get-buffer-window output-buffer)
+      (recenter 0))
+    (goto-char (point-max))
+    (let ((inhibit-read-only t))
+      (setq chatgpt-last-response (point))
+      (insert (format "%s %s >>> %s\n%s\n%s\n%s"
+                      (if (= (point-min) (point))
+                          "\n"
+                        "\n\n")
+                      model-name
+                      (propertize query 'face 'bold)
+                      (make-string (chatgpt-get-buffer-width-by-char ?-) ?-)
+                      (propertize
+                       (chatgpt--identifier-string id)
+                       'invisible t)
+                      (if chatgpt-enable-loading-ellipsis
+                          ""
+                        (concat "Waiting for ChatGPT...")))))))
 
 (defun chatgpt--insert-response (response id &optional output-buffer)
   "Insert RESPONSE into *ChatGPT* for ID."
@@ -675,6 +691,10 @@ Supported query types are:
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (chatgpt-read-query "ChatGPT Stream Query: "))))
+  (when (region-active-p)
+    (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
+          chatgpt-saved-region-end-line (line-number-at-pos (region-end))
+          chatgpt-saved-region-buffer (current-buffer)))
   (chatgpt-query-stream query
                        (if (null chatgpt-last-use-model)
                            chatgpt-default-model
@@ -685,6 +705,10 @@ Supported query types are:
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (chatgpt-read-query "ChatGPT Stream Query: "))))
+  (when (region-active-p)
+    (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
+          chatgpt-saved-region-end-line (line-number-at-pos (region-end))
+          chatgpt-saved-region-buffer (current-buffer)))
   (chatgpt-query-stream query chatgpt-second-preferest-model))
 
 
@@ -696,6 +720,10 @@ Supported query types are:
         (buffer-substring-no-properties (region-beginning) (region-end))
       (chatgpt-read-query "ChatGPT Stream Query: "))
     nil))  ; Default choice to nil when called interactively
+  (when (region-active-p)
+    (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
+          chatgpt-saved-region-end-line (line-number-at-pos (region-end))
+          chatgpt-saved-region-buffer (current-buffer)))
   (let ((model (or choice
                    (let ((choices chatgpt-ai-choices))
                      (ivy-read "Choose one: " choices
@@ -708,135 +736,66 @@ Supported query types are:
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (chatgpt-read-query "ChatGPT Stream Query: "))))
+  (when (region-active-p)
+    (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
+          chatgpt-saved-region-end-line (line-number-at-pos (region-end))
+          chatgpt-saved-region-buffer (current-buffer)))
   (chatgpt-query query chatgpt-default-model))
 
-(defun chatgpt-apply-region-diff-to-buffer (start end)
-  "Apply a unified diff from the selected region to another buffer in the same window.
-Follows strict line ordering, tracks first change position, and ensures undo correctness.
-Additionally, ignores the (wrong) hunk-header line numbers, instead searching the next remove/context/add line in the target buffer to anchor changes."
-  (interactive "r")
-  (let ((diff-buffer (current-buffer))
-        (target-buffer nil)
-        (lines nil)
-        (first-change-pos nil)
-        (success t)
-        ;; We'll store a line-number-like variable but won't use it
-        ;; because the hunk header info is said to be wrong:
-        (current-line nil))  ;; Tracks "wanted" line number from hunk-header (not actually used).
+(defun chatgpt-show-region-diff ()
+  "Create a new frame showing diff between current selected region and saved region."
+  (interactive)
+  (unless (and (boundp 'chatgpt-saved-region-buffer)
+               (boundp 'chatgpt-saved-region-start-line)
+               (boundp 'chatgpt-saved-region-end-line)
+               chatgpt-saved-region-buffer
+               chatgpt-saved-region-start-line
+               chatgpt-saved-region-end-line)
+    (error "No saved region found. Run chatgpt-query-stream-default with a region first"))
 
-    ;; Find the target buffer in the same window
-    (dolist (win (window-list))
-      (let ((buf (window-buffer win)))
-        (unless (eq buf diff-buffer)
-          (setq target-buffer buf))))
+  (unless (region-active-p)
+    (error "No active region selected"))
 
-    (unless target-buffer
-      (error "No other buffer found in the same window to apply diff"))
+  (let* ((current-region (buffer-substring-no-properties (region-beginning) (region-end)))
+         (saved-region (with-current-buffer chatgpt-saved-region-buffer  ; Use saved buffer
+                        (save-excursion
+                          (goto-line chatgpt-saved-region-start-line)
+                          (let ((start (line-beginning-position)))
+                            (goto-line chatgpt-saved-region-end-line)
+                            (let ((end (line-end-position)))
+                              (buffer-substring-no-properties start end))))))
 
-    ;; Parse the diff content
-    (save-excursion
-      (goto-char start)
-      (while (< (point) end)
-        (let ((line (buffer-substring-no-properties
-                     (line-beginning-position)
-                     (line-end-position))))
-          (cond
-           ;; Ignore file metadata lines (--- and +++)
-           ((or (string-prefix-p "+++" line)
-                (string-prefix-p "---" line))
-            nil)
+         (temp-dir (make-temp-file "chatgpt-diff" t))
+         (original-file (expand-file-name "original.txt" temp-dir))
+         (current-file (expand-file-name "current.txt" temp-dir))
+         (new-frame (make-frame '((name . "ChatGPT Region Diff")
+                                 (width . 120)
+                                 (height . 40)))))
 
-           ;; Extract @@ hunk header information
-           ((string-match "^@@ -\\([0-9]+\\),?\\([0-9]*\\) \\+\\([0-9]+\\),?\\([0-9]*\\) @@" line)
-            ;; We'll store the new-file line number, but won't rely on it for movement:
-            (setq current-line (string-to-number (match-string 3 line)))
-            (push (cons 'hunk-header current-line) lines))
+    ;; Write regions to temporary files
+    (with-temp-file original-file
+      (insert saved-region))
 
-           ;; Actual diff content lines
-           (t
-            (push (cons (cond ((string-prefix-p "-" line) 'remove)
-                              ((string-prefix-p "+" line) 'add)
-                              (t 'context))
-                        (substring line 1))
-                  lines))))
-        (forward-line 1)))
+    (with-temp-file current-file
+      (insert current-region))
 
-    ;; Reverse to preserve the original top-to-bottom order
-    (setq lines (reverse lines))
+    ;; Switch to new frame and show diff
+    (select-frame new-frame)
+    (diff original-file current-file)
 
-    ;; Apply changes to the target buffer
-    (with-current-buffer target-buffer
-      (undo-boundary)
-      (save-excursion
-        (dolist (hunk lines)
-          (cond
-           ((eq (car hunk) 'hunk-header)
-            ;; The cdr is the new-file line number, but we won't use it.
-            ;; Instead, we look ahead in the diff lines for the next
-            ;; remove/context/add line to anchor our position.
-            (let* ((lines-after-this (cdr (memq hunk lines))) ;; everything after THIS hunk in `lines`
-                   (anchor
-                    (cl-find-if
-                     (lambda (l)
-                       (memq (car l) '(remove context add)))
-                     lines-after-this)))
-              (when anchor
-                (goto-char (point-min))
-                (let ((anchor-text (cdr anchor)))
-                  ;; If the anchor line is not found, we error out.
-                  (unless (search-forward anchor-text nil t)
-                    (error "Cannot find anchor text for hunk: %S" anchor-text))
-                  (beginning-of-line)))))
+    ;; Rename buffers for clarity
+    (with-current-buffer "*Diff*"
+      (rename-buffer "*ChatGPT Region Diff*"))
 
-           ((eq (car hunk) 'remove)
-            (let ((expected-line (cdr hunk))
-                  (actual-line (buffer-substring-no-properties
-                                (line-beginning-position)
-                                (line-end-position))))
-              (if (string= expected-line actual-line)
-                  (progn
-                    (unless first-change-pos (setq first-change-pos (point)))
-                    (delete-region (line-beginning-position) (line-end-position))
-                    (when (not (eobp))
-                      (delete-char 1))) ;; remove the newline if not end-of-buffer
-                (error "Error: Expected line for removal not found.\nExpected: %S\nFound:    %S"
-                       expected-line actual-line))))
-
-           ((eq (car hunk) 'add)
-            (unless first-change-pos (setq first-change-pos (point)))
-            (insert (cdr hunk) "\n"))
-
-           ((eq (car hunk) 'context)
-            (let ((expected-line (cdr hunk))
-                  (actual-line (buffer-substring-no-properties
-                                (line-beginning-position)
-                                (line-end-position))))
-              (unless (string= expected-line actual-line)
-                ;; Log mismatch for debugging
-                (with-current-buffer (get-buffer-create "*Diff Mismatch Log*")
-                  (goto-char (point-max))
-                  (insert (format "Context mismatch!\nExpected: %s\nFound:    %s\n\n"
-                                  expected-line actual-line)))
-                (error "Context mismatch.\nExpected: %S\nFound:    %S"
-                       expected-line actual-line))
-              (forward-line 1)))))
-      ;; After applying all hunks:
-
-      ;; Move cursor to the first modified position
-      (when first-change-pos
-        (goto-char first-change-pos))
-
-      (undo-boundary)
-
-      ;; If you use Evil mode, refresh cursor
-      (when (bound-and-true-p evil-mode)
-        (evil-normal-state)
-        (evil-refresh-cursor)))
-
-    (if success
-        (message "Diff applied successfully to %s (cursor moved to first change)"
-                 (buffer-name target-buffer))
-      (message "Diff application aborted due to errors.")))))
+    ;; Clean up temp files when frame is deleted
+    (add-hook 'delete-frame-functions
+              (lambda (frame)
+                (when (string= (frame-parameter frame 'name) "ChatGPT Region Diff")
+                  (ignore-errors
+                    (delete-file original-file)
+                    (delete-file current-file)
+                    (delete-directory temp-dir))))
+              nil t)))
 
 (defun chatgpt-format-file-name (file)
   "Format FILE name with proper face and properties."
