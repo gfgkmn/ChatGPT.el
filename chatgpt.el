@@ -553,7 +553,6 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
     (deferred:$
      (deferred:$
       (epc:call-deferred chatgpt-process 'querystream
-      ;; (epc:call-deferred chatgpt-process 'query_manager
                          (list query_with_id recursive-model reuse (buffer-name use-buffer-name)))
 
       (deferred:nextc it
@@ -743,7 +742,7 @@ Supported query types are:
   (chatgpt-query query chatgpt-default-model))
 
 (defun chatgpt-show-region-diff ()
-  "Create a new frame showing diff between current selected region and saved region."
+  "Create a new frame showing diff between current selected region and saved region using Ediff."
   (interactive)
   (unless (and (boundp 'chatgpt-saved-region-buffer)
                (boundp 'chatgpt-saved-region-start-line)
@@ -756,46 +755,39 @@ Supported query types are:
   (unless (region-active-p)
     (error "No active region selected"))
 
-  (let* ((current-region (buffer-substring-no-properties (region-beginning) (region-end)))
-         (saved-region (with-current-buffer chatgpt-saved-region-buffer  ; Use saved buffer
-                        (save-excursion
-                          (goto-line chatgpt-saved-region-start-line)
-                          (let ((start (line-beginning-position)))
-                            (goto-line chatgpt-saved-region-end-line)
-                            (let ((end (line-end-position)))
-                              (buffer-substring-no-properties start end))))))
-
-         (temp-dir (make-temp-file "chatgpt-diff" t))
-         (original-file (expand-file-name "original.txt" temp-dir))
-         (current-file (expand-file-name "current.txt" temp-dir))
+  (let* ((current-buffer (current-buffer))
+         (current-start (region-beginning))
+         (current-end (region-end))
+         (saved-buffer chatgpt-saved-region-buffer)
+         (saved-start (with-current-buffer saved-buffer
+                       (save-excursion
+                         (goto-line chatgpt-saved-region-start-line)
+                         (line-beginning-position))))
+         (saved-end (with-current-buffer saved-buffer
+                     (save-excursion
+                       (goto-line chatgpt-saved-region-end-line)
+                       (line-end-position))))
          (new-frame (make-frame '((name . "ChatGPT Region Diff")
                                  (width . 120)
                                  (height . 40)))))
 
-    ;; Write regions to temporary files
-    (with-temp-file original-file
-      (insert saved-region))
-
-    (with-temp-file current-file
-      (insert current-region))
-
-    ;; Switch to new frame and show diff
+    ;; Switch to new frame
     (select-frame new-frame)
-    (diff original-file current-file)
 
-    ;; Rename buffers for clarity
-    (with-current-buffer "*Diff*"
-      (rename-buffer "*ChatGPT Region Diff*"))
-
-    ;; Clean up temp files when frame is deleted
-    (add-hook 'delete-frame-functions
-              (lambda (frame)
-                (when (string= (frame-parameter frame 'name) "ChatGPT Region Diff")
-                  (ignore-errors
-                    (delete-file original-file)
-                    (delete-file current-file)
-                    (delete-directory temp-dir))))
-              nil t)))
+    ;; Call ediff-regions-internal with startup hook to close frame on quit
+    (ediff-regions-internal
+     saved-buffer saved-start saved-end       ; buffer-A beg-A end-A
+     current-buffer current-start current-end ; buffer-B beg-B end-B
+     (list (lambda ()                         ; startup-hooks
+             (add-hook 'ediff-quit-hook
+                       (lambda ()
+                         (when (string= (frame-parameter (selected-frame) 'name)
+                                       "ChatGPT Region Diff")
+                           (delete-frame (selected-frame))))
+                       nil t)))
+     'ediff-regions-linewise               ; job-name
+     nil                                   ; word-mode
+     nil)))                                ; setup-parameters
 
 (defun chatgpt-format-file-name (file)
   "Format FILE name with proper face and properties."
