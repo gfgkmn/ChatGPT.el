@@ -10,6 +10,25 @@ import traceback
 from chatgpt_v3 import Chatbot
 from epc.server import EPCServer
 
+import signal
+from contextlib import contextmanager
+
+@contextmanager
+def timeout_context(seconds):
+    def timeout_handler(signum, frame):
+        raise TimeoutError(f"Operation timed out after {seconds} seconds")
+
+    # Set the signal handler
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(seconds)
+
+    try:
+        yield
+    finally:
+        # Restore the old handler and cancel the alarm
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
 server = EPCServer(('localhost', 0))
 
 # get from $home/.config/chatgptel.json
@@ -146,43 +165,49 @@ def query(query, botname, convo_id='default'):
 
 
 @server.register_function
-def querystream(query_with_id, botname, reuse, convo_id='default'):
+def querystream(query_with_id, botname, reuse, convo_id='default', timeout=5):
     global bots, stream_reply, conversations
 
     try:
-        if bots[botname]["identity"] is None:
-            bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
+        with timeout_context(timeout):
+            if bots[botname]["identity"] is None:
+                bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
 
-        # Parse query ID and query
-        query_with_id = query_with_id.split('-', maxsplit=5)
-        query = query_with_id[5]
-        query_id = '-'.join(query_with_id[:5])
+            # Parse query ID and query
+            query_with_id = query_with_id.split('-', maxsplit=5)
+            query = query_with_id[5]
+            query_id = '-'.join(query_with_id[:5])
 
-        if query_id not in stream_reply:
-            bots[botname]["identity"].conversation = conversations
+            if query_id not in stream_reply:
+                bots[botname]["identity"].conversation = conversations
 
-            if reuse:
-                assert convo_id in conversations
-                if bots[botname]["identity"].conversation[convo_id][-1][
-                        'role'] == "assistant":
-                    bots[botname]["identity"].rollback(2, convo_id=convo_id)
-                else:
-                    bots[botname]["identity"].rollback(1, convo_id=convo_id)
+                if reuse:
+                    assert convo_id in conversations
+                    if bots[botname]["identity"].conversation[convo_id][-1][
+                            'role'] == "assistant":
+                        bots[botname]["identity"].rollback(2, convo_id=convo_id)
+                    else:
+                        bots[botname]["identity"].rollback(1, convo_id=convo_id)
 
-            if botname in ['maxwell', 'harrison']:
-                bots[botname]["identity"].reset(convo_id=convo_id)
+                if botname in ['maxwell', 'harrison']:
+                    bots[botname]["identity"].reset(convo_id=convo_id)
 
-            query, display_files = process_syntax(query)
-            stream_reply[query_id] = bots[botname]["identity"].ask_stream(
-                query, convo_id=convo_id, **bots[botname]["gen_setting"])
+                query, display_files = process_syntax(query)
+                stream_reply[query_id] = bots[botname]["identity"].ask_stream(
+                    query, convo_id=convo_id, **bots[botname]["gen_setting"])
 
-            return {"type": 0, "message": display_files + next(stream_reply[query_id])}
-        else:
-            return {"type": 0, "message": next(stream_reply[query_id])}
+                return {"type": 0, "message": display_files + next(stream_reply[query_id])}
+            else:
+                return {"type": 0, "message": next(stream_reply[query_id])}
     except StopIteration:
         stream_reply.pop(query_id)
         conversations = copy.deepcopy(bots[botname]["identity"].conversation)
         return {"type": 0, "message": None}
+    except TimeoutError as e:
+        # Clean up on timeout
+        if query_id in stream_reply:
+            stream_reply.pop(query_id)
+        return {"type": 1, "message": f"Timeout: {str(e)}"}
     except Exception as e:
         return {"type": 1, "message": f"Exception: {str(e)}\n{traceback.format_exc()}"}
 

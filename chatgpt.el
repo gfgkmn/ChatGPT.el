@@ -188,6 +188,7 @@ This function retrieves and displays the port number of the running EPC server."
     (chatgpt--stop-wait id))
   (epc:stop-epc chatgpt-process)
   (setq chatgpt-process nil)
+  (setq chatgpt-running-flag nil)
   (message "Stop ChatGPT process."))
 
 ;;;###autoload
