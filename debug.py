@@ -20,7 +20,7 @@ client = EPCClient((host, port))
 
 # Define test parameters
 # botname = "harrison"  # Replace with your bot's name in chatgptel.json
-botname = "claude"  # Replace with your bot's name in chatgptel.json
+botname = "gpt4o"  # Replace with your bot's name in chatgptel.json
 
 
 # query_text = "Hello! How are you doing today?"
@@ -52,15 +52,15 @@ botname = "claude"  # Replace with your bot's name in chatgptel.json
 #     print("Error in `querystream` test:", error_message)
 
 
-query_text = "how to quicksort a array"
+query_text = "@[[/sshx:cranberry:/home/yuhe/dreamily-v3.5-deploy/app/modeling_dcformer.py]], @[[/sshx:cranberry:/home/yuhe/dreamily-v3.5-deploy/app/test_cuda.py]], how manu files you can see"
 
 # # Test the `query` function
 # print("Testing `query` function...")
 # response = client.call_sync('query', [query_text, botname])
 # print("Response:", response)
 
-# Test the `query_manager` function
-print("\nTesting `query_manager` function...")
+# Test the `querystream` function
+print("\nTesting `querystream` function...")
 
 try:
     # (org-id-uuid)
@@ -69,17 +69,17 @@ try:
     query_with_id = f"{query_with_id}-{query_text}"
     response_stream = []
     while True:
-        reply = client.call_sync('query_manager', [query_with_id, botname, False])
+        reply = client.call_sync('querystream', [query_with_id, botname, False])
         if reply[3] == []:
             break
         elif reply[1] == 1:
-            raise Exception("Error in `query_manager` test:", reply[3])
+            raise Exception("Error in `querystream` test:", reply[3])
         response_stream.append(reply[3])
         print("Streamed Reply:", reply[3])
     print("Complete Streamed Response:", "".join(response_stream))
 except Exception as e:
     error_message = traceback.format_exc()
-    print("Error in `query_manager` test:", error_message)
+    print("Error in `querystream` test:", error_message)
 
 # Close the client
 client.close()

@@ -6,12 +6,13 @@ import os
 import re
 import textwrap
 import traceback
+import subprocess
 
 from chatgpt_v3 import Chatbot
 from epc.server import EPCServer
 
 import signal
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 @contextmanager
 def timeout_context(seconds):
@@ -55,9 +56,29 @@ def format_display_files(display_files, width=90):
     formatted_files = textwrap.fill(display_files, width=width)
     return f"{header}\n{formatted_files}\n{'-' * width}\n"
 
+def is_valid_remote_file_path(path):
+   """Check if the remote path is a valid file using ssh."""
+   try:
+       # Parse /sshx:machine:/path format
+       parts = path.split(':', 2)
+       if len(parts) != 3 or not parts[0] == '/sshx':
+           return False
+
+       machine = parts[1]
+       remote_path = parts[2]
+
+       # Use ssh to check if file exists and is a regular file
+       cmd = ['ssh', machine, f'test -f "{remote_path}"']
+       result = subprocess.run(cmd, capture_output=True, timeout=10)
+       return result.returncode == 0
+   except (subprocess.TimeoutExpired, subprocess.SubprocessError, IndexError):
+       return False
 
 def is_valid_file_path(path):
     """Check if the path is a valid file (not a directory) and exists."""
+    # Handle remote paths with /sshx:machine:/path format
+    if path.startswith('/sshx:'):
+        return is_valid_remote_file_path(path)
     return os.path.isfile(path)
 
 
@@ -81,9 +102,33 @@ def extract_valid_path(text, path_checker):
             return path
     return None
 
+def read_remote_file_content(file_path):
+   """Reads remote file content using ssh."""
+   try:
+       # Parse /sshx:machine:/path format
+       parts = file_path.split(':', 2)
+       if len(parts) != 3 or not parts[0] == '/sshx':
+           raise ValueError(f"Invalid remote path format: {file_path}")
+
+       machine = parts[1]
+       remote_path = parts[2]
+
+       # Use ssh to read file content
+       cmd = ['ssh', machine, f'cat "{remote_path}"']
+       result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+       if result.returncode != 0:
+           raise Exception(f"Failed to read remote file: {result.stderr}")
+
+       return result.stdout
+   except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+       raise Exception(f"Error reading remote file {file_path}: {str(e)}")
 
 def read_file_content(file_path):
     """Reads file content safely."""
+    # Handle remote paths with /sshx:machine:/path format
+    if file_path.startswith('/sshx:'):
+        return read_remote_file_content(file_path)
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -101,29 +146,27 @@ def process_syntax(query):
     file_contents = []
     display_files = ""
 
-    # Match @[[file_path]], #[[folder_path]], and @project
-    file_match = re.search(r"@\[\[([^\]]+)\]\]", query)
-    folder_match = re.search(r"#\[\[([^\]]+)\]\]", query)
+    # Find all matches for @[[file_path]], #[[folder_path]], and @project
+    file_matches = re.findall(r"@\[\[([^\]]+)\]\]", query)
+    folder_matches = re.findall(r"#\[\[([^\]]+)\]\]", query)
     git_match = re.search(r"\@project", query)
 
-    # Process @[[file_path]]
-    if file_match:
-        file_path = file_match.group(1)
+    # Process each @[[file_path]]
+    for file_path in file_matches:
         if is_valid_file_path(file_path):
             content = read_file_content(file_path)
             file_contents.append(f"### File: {file_path} ###\n{content}")
-            query = query.replace(f"@[[{file_path}]]", "{Files_show_above}").strip()
+            query = query.replace(f"@[[{file_path}]]", f"{file_path}").strip()
             display_files += file_path + " "
 
-    # Process #[[folder_path]]
-    if folder_match:
-        folder_path = folder_match.group(1)
+    # Process each #[[folder_path]]
+    for folder_path in folder_matches:
         if is_valid_folder_path(folder_path):
             folder_files = get_files_from_folder(folder_path)
             for file_path in folder_files:
                 content = read_file_content(file_path)
                 file_contents.append(f"### File: {file_path} ###\n{content}")
-            query = query.replace(f"#[[{folder_path}]]", "{Files_show_above}").strip()
+            query = query.replace(f"#[[{folder_path}]]", f"{folder_path}").strip()
             display_files += " ".join(folder_files) + " "
 
     # Process @project command
@@ -139,7 +182,7 @@ def process_syntax(query):
 
     # Construct new query with delimiters
     if file_contents:
-        extracted_code = "\n\n--- FILE CONTEXT ---\n\n".join(file_contents)
+        extracted_code = "--- FILE CONTEXT ---\n\n" + "\n\n--- FILE CONTEXT ---\n\n".join(file_contents)
         query = f"{extracted_code}\n\n--- USER QUERY ---\n\n{query}"
 
     return query, format_display_files(display_files)
@@ -170,6 +213,7 @@ def querystream(query_with_id, botname, reuse, convo_id='default', timeout=5):
 
     try:
         with timeout_context(timeout):
+        # with nullcontext():  # for debug
             if bots[botname]["identity"] is None:
                 bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
 
@@ -181,8 +225,7 @@ def querystream(query_with_id, botname, reuse, convo_id='default', timeout=5):
             if query_id not in stream_reply:
                 bots[botname]["identity"].conversation = conversations
 
-                if reuse:
-                    assert convo_id in conversations
+                if reuse and convo_id in conversations:
                     if bots[botname]["identity"].conversation[convo_id][-1][
                             'role'] == "assistant":
                         bots[botname]["identity"].rollback(2, convo_id=convo_id)
@@ -210,40 +253,6 @@ def querystream(query_with_id, botname, reuse, convo_id='default', timeout=5):
         return {"type": 1, "message": f"Timeout: {str(e)}"}
     except Exception as e:
         return {"type": 1, "message": f"Exception: {str(e)}\n{traceback.format_exc()}"}
-
-
-@server.register_function
-def query_manager(query_with_id, botname, reuse, convo_id='default'):
-
-    # Initialize buffer storage if not exists
-    if not hasattr(query_manager, 'buffers'):
-        query_manager.buffers = {}
-    if not hasattr(query_manager, 'invoke_counts'):
-        query_manager.invoke_counts = {}
-
-    # Initialize buffer and reuse count for new query_id
-    if query_with_id not in query_manager.buffers:
-        query_manager.buffers[query_with_id] = []
-        query_manager.invoke_counts[query_with_id] = 0
-    elif query_manager.invoke_counts[query_with_id] < 0:
-        query_manager.buffers.pop(query_with_id, None)
-        query_manager.invoke_counts.pop(query_with_id, None)
-        return {"type": 0, "message": None}
-    else:
-        query_manager.invoke_counts[query_with_id] += 1
-
-    if query_manager.invoke_counts[query_with_id] < 40:
-        return querystream(query_with_id, botname, reuse, convo_id)
-    else:
-        current_return = querystream(query_with_id, botname, reuse, convo_id)
-        while current_return["type"] == 0 and current_return["message"] is not None:
-            query_manager.buffers[query_with_id].append(current_return["message"])
-            current_return = querystream(query_with_id, botname, reuse, convo_id)
-        if current_return["type"] == 1:
-            return current_return
-        else:
-            query_manager.invoke_counts[query_with_id] = -1
-            return {"type": 0, "message": "".join(query_manager.buffers[query_with_id])}
 
 port = server.server_address[1]  # Get the port number
 with open("epc_port.txt", "w") as f:
