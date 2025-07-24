@@ -179,6 +179,10 @@ This function retrieves and displays the port number of the running EPC server."
 (defvar chatgpt-wait-timers (make-hash-table)
   "Timers to update the waiting message in the ChatGPT buffer.")
 
+(defvar chatgpt-cancelled-thresholds nil
+  "Alist of (buffer-name . max-cancelled-id).
+ Any query with ID <= this threshold is considered cancelled.")
+
 ;;;###autoload
 (defun chatgpt-stop ()
   "Stops the ChatGPT server."
@@ -186,6 +190,11 @@ This function retrieves and displays the port number of the running EPC server."
   ;; Stop all wait timers
   (dolist (id (hash-table-keys chatgpt-wait-timers))
     (chatgpt--stop-wait id))
+
+   (let ((current-buffer-name (chatgpt-get-output-buffer-name)))
+     (setf (alist-get current-buffer-name chatgpt-cancelled-thresholds nil nil #'string=)
+           chatgpt-id))
+
   (epc:stop-epc chatgpt-process)
   (setq chatgpt-process nil)
   (setq chatgpt-running-flag nil)
@@ -559,6 +568,14 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
       (deferred:nextc it
                       #'(lambda (response)
                           (with-current-buffer use-buffer-name
+                            (let ((buffer-name-str (if (bufferp use-buffer-name)
+                                                       (buffer-name use-buffer-name)
+                                                     use-buffer-name)))
+                              (when (<= saved-id
+                                        (or (alist-get buffer-name-str chatgpt-cancelled-thresholds
+                                                       nil nil #'string=)
+                                            0))
+                                (cl-return-from nil)))
                             (save-excursion
                               (if (numberp next-recursive)
                                   (goto-char next-recursive)
@@ -593,6 +610,14 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
      (deferred:error it
                      `(lambda (err)
                         (message "err is:%s" err)
+                        (let ((buffer-name-str (if (bufferp use-buffer-name)
+                                                   (buffer-name use-buffer-name)
+                                                 use-buffer-name)))
+                          (when (<= saved-id
+                                    (or (alist-get buffer-name-str chatgpt-cancelled-thresholds
+                                                   nil nil #'string=)
+                                        0))
+                            (cl-return-from nil)))
                         (with-current-buffer ,use-buffer-name
                           (save-excursion
                             (if (numberp next-recursive)
@@ -603,6 +628,13 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                             (save-buffer)))
                         (setq chatgpt-check-running-flag nil)
                         (setq chatgpt-running-flag nil))))))
+
+;;;###autoload
+(defun chatgpt-clear-cancelled-queries ()
+  "Clear the cancelled queries list. Useful for cleanup."
+  (interactive)
+  (setq chatgpt-cancelled-queries nil)
+  (message "Cleared cancelled queries list"))
 
 
 (defun chatgpt--query-by-type-stream (query query-type use-model)
