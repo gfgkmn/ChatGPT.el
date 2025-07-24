@@ -10,24 +10,28 @@ import traceback
 from chatgpt_v3 import Chatbot
 from epc.server import EPCServer
 
+import platform
 import signal
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 @contextmanager
 def timeout_context(seconds):
-    def timeout_handler(signum, frame):
-        raise TimeoutError(f"Operation timed out after {seconds} seconds")
+    if platform.system() == 'Windows':
+        yield  # On Windows, just yield without timeout
+    else:
+        def timeout_handler(signum, frame):
+            raise TimeoutError(f"Operation timed out after {seconds} seconds")
 
-    # Set the signal handler
-    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(seconds)
+        # Set the signal handler
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(seconds)
 
-    try:
-        yield
-    finally:
-        # Restore the old handler and cancel the alarm
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
+        try:
+            yield
+        finally:
+            # Restore the old handler and cancel the alarm
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
 
 server = EPCServer(('localhost', 0))
 
