@@ -17,7 +17,7 @@
 (require 'python)
 (require 'cl)
 (require 'org-id)
-
+(require 'chatgpt-multi-region nil t)  ; Load multi-region support if available
 
 ;;; Code:
 
@@ -56,7 +56,7 @@
   :type 'string
   :group 'chatgpt)
 
-(defcustom chatgpt-initial-timeout 600
+(defcustom chatgpt-initial-timeout 20
   "Timeout in seconds for initial ChatGPT requests."
   :type 'integer
   :group 'chatgpt)
@@ -761,6 +761,20 @@ Supported query types are:
                      (ivy-read "Choose one: " choices
                                :initial-input chatgpt-last-use-model)))))
     (chatgpt-query-stream query model)))
+
+;;;###autoload
+(defun chatgpt-mr-query-stream-choose (prompt)
+  "Query ChatGPT with collected multi-regions, choosing model interactively."
+  (interactive (list (read-string "Prompt for all regions: ")))
+  (if (and (fboundp 'chatgpt-mr--format-regions-for-query)
+           (boundp 'chatgpt-mr-regions)
+           chatgpt-mr-regions)
+      (let ((formatted-query (chatgpt-mr--format-regions-for-query prompt)))
+        (let ((model (let ((choices chatgpt-ai-choices))
+                      (ivy-read "Choose one: " choices
+                                :initial-input chatgpt-last-use-model))))
+          (chatgpt-query-stream formatted-query model)))
+    (user-error "No regions collected or chatgpt-multi-region not loaded")))
 
 
 ;;;###autoload
