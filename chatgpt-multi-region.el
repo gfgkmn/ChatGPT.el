@@ -104,7 +104,7 @@ Clears existing regions and hooks into yank to auto-add regions."
   (interactive)
   (when chatgpt-mr-mode
     (message "Multi-region mode already active")
-    (cl-return))
+    (cl-return-from chatgpt-mr-mode-on))
 
   ;; Clear existing regions when turning on
   (setq chatgpt-mr-regions nil
@@ -122,30 +122,17 @@ Clears existing regions and hooks into yank to auto-add regions."
 
   (message "Multi-region mode ON - yank (y) will now add regions automatically"))
 
-;;;###autoload
-(defun chatgpt-mr-mode-off ()
-  "Turn off multi-region mode and remove yank hooks."
-  (interactive)
-  (unless chatgpt-mr-mode
-    (message "Multi-region mode already inactive")
-    (cl-return))
+(defun chatgpt-mr--mode-off ()
+  "Internal function to turn off multi-region mode and remove yank hooks."
+  (when chatgpt-mr-mode
+    ;; Disable multi-region mode
+    (setq chatgpt-mr-mode nil)
 
-  ;; Disable multi-region mode
-  (setq chatgpt-mr-mode nil)
+    ;; Remove hooks
+    (advice-remove 'evil-yank #'chatgpt-mr--evil-yank-advice)
+    (advice-remove 'yank #'chatgpt-mr--yank-advice)
 
-  ;; Remove hooks
-  (advice-remove 'evil-yank #'chatgpt-mr--evil-yank-advice)
-  (advice-remove 'yank #'chatgpt-mr--yank-advice)
-
-  (message "Multi-region mode OFF"))
-
-;;;###autoload
-(defun chatgpt-mr-toggle ()
-  "Toggle multi-region mode on/off."
-  (interactive)
-  (if chatgpt-mr-mode
-      (chatgpt-mr-mode-off)
-    (chatgpt-mr-mode-on)))
+    (message "Multi-region mode OFF")))
 
 (defun chatgpt-mr--evil-yank-advice (&rest args)
   "Advice function to add region after evil yank."
@@ -264,21 +251,25 @@ Clears existing regions and hooks into yank to auto-add regions."
 
 ;;; Integration with ChatGPT.el
 
-;;;###autoload
-(defun chatgpt-mr-query-stream (prompt &optional model)
-  "Query ChatGPT with collected regions using stream interface.
-PROMPT will be applied to all collected regions.
-MODEL defaults to the last used model or chatgpt-default-model."
-  (interactive (list (read-string "Prompt for all regions: ")
-                     nil))
-  (let ((formatted-query (chatgpt-mr--format-regions-for-query prompt))
-        (use-model (or model
-                      (bound-and-true-p chatgpt-last-use-model)
-                      (bound-and-true-p chatgpt-default-model)
-                      "claude")))
-    (if (fboundp 'chatgpt--query-stream)
-        (chatgpt--query-stream formatted-query use-model)
-      (user-error "ChatGPT.el not properly loaded or chatgpt--query-stream not available"))))
+(defun chatgpt-mr--execute-and-cleanup (formatted-query model)
+  "Execute query with formatted regions and cleanup after completion.
+Internal function to avoid duplication."
+  (if (fboundp 'chatgpt--query-stream)
+      (progn
+        (chatgpt--query-stream formatted-query model)
+        ;; Clear regions and turn off multi-region mode after consumption
+        (setq chatgpt-mr-regions nil
+              chatgpt-mr-counter 0)
+        (chatgpt-mr--mode-off)
+        (message "Multi-region query sent. Regions cleared and multi-region mode turned off."))
+    (user-error "ChatGPT.el not properly loaded or chatgpt--query-stream not available")))
+
+(defun chatgpt-mr--get-formatted-query (prompt)
+  "Get formatted query with all collected regions.
+Returns the formatted query or signals error if no regions."
+  (if (and (boundp 'chatgpt-mr-regions) chatgpt-mr-regions)
+      (chatgpt-mr--format-regions-for-query prompt)
+    (user-error "No regions collected. Use multi-region mode first")))
 
 ;;; Status Display
 
@@ -302,19 +293,6 @@ MODEL defaults to the last used model or chatgpt-default-model."
   (interactive)
   (setq global-mode-string
         (remove '(:eval (chatgpt-mr--mode-line-status)) global-mode-string)))
-
-;;; Key Bindings Helper
-
-;; ;;;###autoload
-;; (defun chatgpt-mr-setup-keys ()
-;;   "Setup key bindings for simplified multi-region functionality."
-;;   (interactive)
-;;   (global-set-key (kbd "C-c g t") 'chatgpt-mr-toggle)      ; Toggle multi-region mode
-;;   (global-set-key (kbd "C-c g a") 'chatgpt-mr-add-region)
-;;   (global-set-key (kbd "C-c g l") 'chatgpt-mr-list-regions)
-;;   (global-set-key (kbd "C-c g c") 'chatgpt-mr-clear-regions)
-;;   (global-set-key (kbd "C-c g q") 'chatgpt-mr-query-stream-choose)
-;;   (message "ChatGPT multi-region keys bound under C-c g prefix"))
 
 (provide 'chatgpt-multi-region)
 ;;; chatgpt-multi-region.el ends here

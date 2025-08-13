@@ -263,18 +263,6 @@ This function retrieves and displays the port number of the running EPC server."
   (re-search-backward (chatgpt--regex-string id))
   (forward-line))
 
-;; (defun chatgpt--goto-identifier (id)
-;;   "Go to response of ID."
-;;   (cl-assert (equal (current-buffer) (get-buffer (chatgpt-get-output-buffer-name))))
-;;   (goto-char (point-max))
-;;   (let ((regex (chatgpt--regex-string id)))
-;;     (message "Searching for regex: %s" regex)
-;;     (if (re-search-backward regex nil t) ; 添加 't' 参数，避免在没有匹配到时抛出错误
-;;         (progn
-;;           (message "Found identifier for ID: %d" id)
-;;           (forward-line))
-;;       (message "Identifier not found for ID: %d" id))))
-
 (defun chatgpt-get-buffer-width-by-char (char)
   "Return the width of the currently focused window in terms of the number of CHAR characters that can fit in the window."
   (let* ((c-width (if (eq char ?=)
@@ -718,8 +706,12 @@ Supported query types are:
     (chatgpt--query-stream query use-model)))
 
 
+;;; Updated wrapper functions
+
 ;;;###autoload
 (defun chatgpt-query-stream-default (query)
+  "Wrapper function that uses multi-region if mode is on, otherwise normal query.
+Queries with default model."
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (chatgpt-read-query "ChatGPT Stream Query: "))))
@@ -727,13 +719,22 @@ Supported query types are:
     (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
           chatgpt-saved-region-end-line (line-number-at-pos (region-end))
           chatgpt-saved-region-buffer (current-buffer)))
-  (chatgpt-query-stream query
-                       (if (null chatgpt-last-use-model)
-                           chatgpt-default-model
-                         chatgpt-last-use-model)))
+
+  (let ((model (if (null chatgpt-last-use-model)
+                   chatgpt-default-model
+                 chatgpt-last-use-model)))
+    (if (and (boundp 'chatgpt-mr-mode) chatgpt-mr-mode
+             (boundp 'chatgpt-mr-regions) chatgpt-mr-regions)
+        ;; Multi-region mode is on and has regions
+        (let ((formatted-query (chatgpt-mr--get-formatted-query query)))
+          (chatgpt-mr--execute-and-cleanup formatted-query model))
+      ;; Normal mode
+      (chatgpt-query-stream query model))))
 
 ;;;###autoload
 (defun chatgpt-query-stream-second-preferest (query)
+  "Wrapper function that uses multi-region if mode is on, otherwise normal query.
+Queries with second preferred model."
   (interactive (list (if (region-active-p)
                          (buffer-substring-no-properties (region-beginning) (region-end))
                        (chatgpt-read-query "ChatGPT Stream Query: "))))
@@ -741,11 +742,39 @@ Supported query types are:
     (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
           chatgpt-saved-region-end-line (line-number-at-pos (region-end))
           chatgpt-saved-region-buffer (current-buffer)))
-  (chatgpt-query-stream query chatgpt-second-preferest-model))
 
+  (if (and (boundp 'chatgpt-mr-mode) chatgpt-mr-mode
+           (boundp 'chatgpt-mr-regions) chatgpt-mr-regions)
+      ;; Multi-region mode is on and has regions
+      (let ((formatted-query (chatgpt-mr--get-formatted-query query)))
+        (chatgpt-mr--execute-and-cleanup formatted-query chatgpt-second-preferest-model))
+    ;; Normal mode
+    (chatgpt-query-stream query chatgpt-second-preferest-model)))
+
+;;;###autoload
+(defun chatgpt-query-default (query)
+  "Wrapper function that uses multi-region if mode is on, otherwise normal query.
+Non-streaming version with default model."
+  (interactive (list (if (region-active-p)
+                         (buffer-substring-no-properties (region-beginning) (region-end))
+                       (chatgpt-read-query "ChatGPT Query: "))))
+  (when (region-active-p)
+    (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
+          chatgpt-saved-region-end-line (line-number-at-pos (region-end))
+          chatgpt-saved-region-buffer (current-buffer)))
+
+  (if (and (boundp 'chatgpt-mr-mode) chatgpt-mr-mode
+           (boundp 'chatgpt-mr-regions) chatgpt-mr-regions)
+      ;; Multi-region mode is on and has regions - always use streaming for multi-region
+      (let ((formatted-query (chatgpt-mr--get-formatted-query query)))
+        (chatgpt-mr--execute-and-cleanup formatted-query chatgpt-default-model))
+    ;; Normal mode
+    (chatgpt-query query chatgpt-default-model)))
 
 ;;;###autoload
 (defun chatgpt-query-stream-choose (query choice)
+  "Wrapper function that uses multi-region if mode is on, otherwise normal query.
+Allows choosing model interactively."
   (interactive
    (list
     (if (region-active-p)
@@ -756,37 +785,26 @@ Supported query types are:
     (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
           chatgpt-saved-region-end-line (line-number-at-pos (region-end))
           chatgpt-saved-region-buffer (current-buffer)))
-  (let ((model (or choice
-                   (let ((choices chatgpt-ai-choices))
-                     (ivy-read "Choose one: " choices
-                               :initial-input chatgpt-last-use-model)))))
-    (chatgpt-query-stream query model)))
 
-;;;###autoload
-(defun chatgpt-mr-query-stream-choose (prompt)
-  "Query ChatGPT with collected multi-regions, choosing model interactively."
-  (interactive (list (read-string "Prompt for all regions: ")))
-  (if (and (fboundp 'chatgpt-mr--format-regions-for-query)
-           (boundp 'chatgpt-mr-regions)
-           chatgpt-mr-regions)
-      (let ((formatted-query (chatgpt-mr--format-regions-for-query prompt)))
-        (let ((model (let ((choices chatgpt-ai-choices))
-                      (ivy-read "Choose one: " choices
-                                :initial-input chatgpt-last-use-model))))
-          (chatgpt-query-stream formatted-query model)))
-    (user-error "No regions collected or chatgpt-multi-region not loaded")))
-
-
-;;;###autoload
-(defun chatgpt-query-default (query)
-  (interactive (list (if (region-active-p)
-                         (buffer-substring-no-properties (region-beginning) (region-end))
-                       (chatgpt-read-query "ChatGPT Stream Query: "))))
-  (when (region-active-p)
-    (setq chatgpt-saved-region-start-line (line-number-at-pos (region-beginning))
-          chatgpt-saved-region-end-line (line-number-at-pos (region-end))
-          chatgpt-saved-region-buffer (current-buffer)))
-  (chatgpt-query query chatgpt-default-model))
+  (if (and (boundp 'chatgpt-mr-mode) chatgpt-mr-mode
+           (boundp 'chatgpt-mr-regions) chatgpt-mr-regions)
+      ;; Multi-region mode is on and has regions
+      (let* ((formatted-query (chatgpt-mr--get-formatted-query query))
+             (model (or choice
+                        (let ((choices chatgpt-ai-choices))
+                          (if (fboundp 'ivy-read)
+                              (ivy-read "Choose model for multi-region query: " choices
+                                        :initial-input chatgpt-last-use-model)
+                            (completing-read "Choose model for multi-region query: " choices nil t))))))
+        (chatgpt-mr--execute-and-cleanup formatted-query model))
+    ;; Normal mode
+    (let ((model (or choice
+                     (let ((choices chatgpt-ai-choices))
+                       (if (fboundp 'ivy-read)
+                           (ivy-read "Choose one: " choices
+                                     :initial-input chatgpt-last-use-model)
+                         (completing-read "Choose model: " choices nil t))))))
+      (chatgpt-query-stream query model))))
 
 (defun chatgpt-show-region-diff ()
   "Create a new frame showing diff between current selected region and saved region using Ediff."
