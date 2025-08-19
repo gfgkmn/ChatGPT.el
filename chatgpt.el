@@ -154,6 +154,7 @@ function."
     (with-current-buffer (chatgpt-get-output-buffer-name)
       (visual-line-mode 1)
       (markdown-mode))
+    (setq chatgpt-last-use-buffer (chatgpt-display))
     (message "ChatGPT initialized.")))
 
 (defun chatgpt-query-epc-port ()
@@ -461,21 +462,21 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         (while chatgpt-check-running-flag
           (sleep-for 0.1))))
 
-  (setq chatgpt-check-running-flag nil)
-
   (let* ((excluded-models '(chatgpt-last-use-model))
          (filtered-choices (cl-set-difference chatgpt-ai-choices
-                                               excluded-models
-                                               :test #'string=))
-          (model (ivy-read "Choose model: " filtered-choices)))
-  (progn
-    (with-current-buffer chatgpt-last-use-buffer
-      (save-excursion
-        (goto-char chatgpt-last-response)
-        (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
-        ;; (delete-region chatgpt-last-response (point-max)))))
-        (delete-region (point) (point-max))))
-    (chatgpt--query-stream chatgpt-last-query model nil chatgpt-last-use-buffer t))))
+                                              excluded-models
+                                              :test #'string=))
+         (model (ivy-read "Choose model: " filtered-choices)))
+    (when (and (boundp 'chatgpt-last-use-buffer)
+               chatgpt-last-use-buffer
+               (buffer-live-p chatgpt-last-use-buffer))
+      (with-current-buffer chatgpt-last-use-buffer
+        (save-excursion
+          (goto-char chatgpt-last-response)
+          (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
+          ;; (delete-region chatgpt-last-response (point-max))
+          (delete-region (point) (point-max)))))
+    (chatgpt--query-stream chatgpt-last-query model nil chatgpt-last-use-buffer t)))
 
 ;;;###autoload
 (defun chatgpt-again ()
@@ -490,14 +491,15 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         (message "ChatGPT is running. Please wait until it finishes.")
         (while chatgpt-check-running-flag
           (sleep-for 0.1))))
-  (setq chatgpt-check-running-flag nil)
 
-  (progn
+  (when (and (boundp 'chatgpt-last-use-buffer)
+             chatgpt-last-use-buffer
+             (buffer-live-p chatgpt-last-use-buffer))
     (with-current-buffer chatgpt-last-use-buffer
       (save-excursion
         (goto-char chatgpt-last-response)
         (message "loaded chatgpt-last-response: %s" chatgpt-last-response)
-        ;; (delete-region chatgpt-last-response (point-max)))))
+        ;; (delete-region chatgpt-last-response (point-max))
         (delete-region (point) (point-max)))))
 
   (chatgpt--query-stream chatgpt-last-query chatgpt-last-use-model nil chatgpt-last-use-buffer t))
