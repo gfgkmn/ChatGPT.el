@@ -212,7 +212,7 @@ def query(query, botname, convo_id='default'):
 
 
 @server.register_function
-def querystream(query_with_id, botname, reuse, convo_id='default', timeout=5):
+def querystream(query_with_id, botname, reuse, convo_id='default', timeout=10):
     global bots, stream_reply, conversations
 
     try:

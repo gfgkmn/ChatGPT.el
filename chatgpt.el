@@ -102,12 +102,6 @@
   :type 'string
   :group 'chatgpt)
 
-;;;###autoload
-(defun chatgpt-login ()
-  "Log in to ChatGPT."
-  (interactive)
-  (shell-command "chatgpt install &"))
-
 ;; TODO: save chatgpt conversation to file
 (defcustom chatgpt-record-path nil
   "The path of ChatGPT.el repository."
@@ -152,10 +146,6 @@ If ChatGPT server is not initialized, 'chatgpt-query' calls this
 function."
   (interactive)
   (let ((default-directory chatgpt-repo-path))
-    (when (equal (shell-command-to-string "pip list | grep revChatGPT") "")
-      (shell-command "pip install revChatGPT")
-      (message "revChatGPT installed through pip.")
-      (chatgpt-login))
     (when (null chatgpt-repo-path)
       (error "chatgpt-repo-path is nil. Please set chatgpt-repo-path as specified in joshcho/ChatGPT.el"))
     (setq chatgpt-process (epc:start-epc python-interpreter (list (expand-file-name
@@ -525,6 +515,8 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
 
     (progn
       (setq use-buffer-name (chatgpt-display))
+      ;; use-buffer-name sometime create by chatgpt-display which is a buffer
+      ;; sometimes is a string?
       (setq chatgpt-last-query query)
       (setq chatgpt-last-use-buffer use-buffer-name)
       (setq chatgpt-last-use-model use-model)))
