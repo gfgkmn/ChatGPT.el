@@ -461,6 +461,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         (message "ChatGPT is running. Please wait until it finishes.")
         (while chatgpt-check-running-flag
           (sleep-for 0.1))))
+  (setq chatgpt-check-running-flag nil)
 
   (let* ((excluded-models '(chatgpt-last-use-model))
          (filtered-choices (cl-set-difference chatgpt-ai-choices
@@ -491,6 +492,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
         (message "ChatGPT is running. Please wait until it finishes.")
         (while chatgpt-check-running-flag
           (sleep-for 0.1))))
+  (setq chatgpt-check-running-flag nil)
 
   (when (and (boundp 'chatgpt-last-use-buffer)
              chatgpt-last-use-buffer
