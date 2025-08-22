@@ -52,7 +52,9 @@ botname = "gpt4o"  # Replace with your bot's name in chatgptel.json
 #     print("Error in `querystream` test:", error_message)
 
 
-query_text = "@[[/sshx:cranberry:/home/yuhe/dreamily-v3.5-deploy/app/modeling_dcformer.py]], @[[/sshx:cranberry:/home/yuhe/dreamily-v3.5-deploy/app/test_cuda.py]], how manu files you can see"
+# query_text = "@[[/sshx:cranberry:/home/yuhe/dreamily-v3.5-deploy/app/modeling_dcformer.py]], @[[/sshx:cranberry:/home/yuhe/dreamily-v3.5-deploy/app/test_cuda.py]], how manu files you can see"
+
+query_text = "how manu files you can see, what's your name"
 
 # # Test the `query` function
 # print("Testing `query` function...")

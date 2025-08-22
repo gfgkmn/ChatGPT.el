@@ -1,38 +1,27 @@
 # chatgpt.py
+import concurrent.futures
 import copy
 import glob
 import json
 import os
 import re
+import subprocess
 import textwrap
 import traceback
-import subprocess
 
 from chatgpt_v3 import Chatbot
 from epc.server import EPCServer
 
-import platform
-import signal
-from contextlib import contextmanager, nullcontext
 
-@contextmanager
-def timeout_context(seconds):
-    if platform.system() == 'Windows':
-        yield  # On Windows, just yield without timeout
-    else:
-        def timeout_handler(signum, frame):
-            raise TimeoutError(f"Operation timed out after {seconds} seconds")
-
-        # Set the signal handler
-        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(seconds)
-
+def with_timeout(func, timeout_seconds, *args, **kwargs):
+    """Execute function with timeout using threading - works with I/O operations."""
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(func, *args, **kwargs)
         try:
-            yield
-        finally:
-            # Restore the old handler and cancel the alarm
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
+            return future.result(timeout=timeout_seconds)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+
 
 server = EPCServer(('localhost', 0))
 
@@ -60,23 +49,25 @@ def format_display_files(display_files, width=90):
     formatted_files = textwrap.fill(display_files, width=width)
     return f"{header}\n{formatted_files}\n{'-' * width}\n"
 
+
 def is_valid_remote_file_path(path):
-   """Check if the remote path is a valid file using ssh."""
-   try:
-       # Parse /sshx:machine:/path format
-       parts = path.split(':', 2)
-       if len(parts) != 3 or not parts[0] == '/sshx':
-           return False
+    """Check if the remote path is a valid file using ssh."""
+    try:
+        # Parse /sshx:machine:/path format
+        parts = path.split(':', 2)
+        if len(parts) != 3 or not parts[0] == '/sshx':
+            return False
 
-       machine = parts[1]
-       remote_path = parts[2]
+        machine = parts[1]
+        remote_path = parts[2]
 
-       # Use ssh to check if file exists and is a regular file
-       cmd = ['ssh', machine, f'test -f "{remote_path}"']
-       result = subprocess.run(cmd, capture_output=True, timeout=10)
-       return result.returncode == 0
-   except (subprocess.TimeoutExpired, subprocess.SubprocessError, IndexError):
-       return False
+        # Use ssh to check if file exists and is a regular file
+        cmd = ['ssh', machine, f'test -f "{remote_path}"']
+        result = subprocess.run(cmd, capture_output=True, timeout=10)
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, IndexError):
+        return False
+
 
 def is_valid_file_path(path):
     """Check if the path is a valid file (not a directory) and exists."""
@@ -106,27 +97,29 @@ def extract_valid_path(text, path_checker):
             return path
     return None
 
+
 def read_remote_file_content(file_path):
-   """Reads remote file content using ssh."""
-   try:
-       # Parse /sshx:machine:/path format
-       parts = file_path.split(':', 2)
-       if len(parts) != 3 or not parts[0] == '/sshx':
-           raise ValueError(f"Invalid remote path format: {file_path}")
+    """Reads remote file content using ssh."""
+    try:
+        # Parse /sshx:machine:/path format
+        parts = file_path.split(':', 2)
+        if len(parts) != 3 or not parts[0] == '/sshx':
+            raise ValueError(f"Invalid remote path format: {file_path}")
 
-       machine = parts[1]
-       remote_path = parts[2]
+        machine = parts[1]
+        remote_path = parts[2]
 
-       # Use ssh to read file content
-       cmd = ['ssh', machine, f'cat "{remote_path}"']
-       result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        # Use ssh to read file content
+        cmd = ['ssh', machine, f'cat "{remote_path}"']
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
-       if result.returncode != 0:
-           raise Exception(f"Failed to read remote file: {result.stderr}")
+        if result.returncode != 0:
+            raise Exception(f"Failed to read remote file: {result.stderr}")
 
-       return result.stdout
-   except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-       raise Exception(f"Error reading remote file {file_path}: {str(e)}")
+        return result.stdout
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+        raise Exception(f"Error reading remote file {file_path}: {str(e)}")
+
 
 def read_file_content(file_path):
     """Reads file content safely."""
@@ -186,7 +179,8 @@ def process_syntax(query):
 
     # Construct new query with delimiters
     if file_contents:
-        extracted_code = "--- FILE CONTEXT ---\n\n" + "\n\n--- FILE CONTEXT ---\n\n".join(file_contents)
+        extracted_code = "--- FILE CONTEXT ---\n\n" + "\n\n--- FILE CONTEXT ---\n\n".join(
+            file_contents)
         query = f"{extracted_code}\n\n--- USER QUERY ---\n\n{query}"
 
     return query, format_display_files(display_files)
@@ -212,51 +206,61 @@ def query(query, botname, convo_id='default'):
 
 
 @server.register_function
-def querystream(query_with_id, botname, reuse, convo_id='default', timeout=10):
+def querystream(query_with_id, botname, reuse, convo_id='default', timeout=6):
     global bots, stream_reply, conversations
 
     try:
-        with timeout_context(timeout):
-        # with nullcontext():  # for debug
-            if bots[botname]["identity"] is None:
-                bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
+        if bots[botname]["identity"] is None:
+            bots[botname]["identity"] = Chatbot(**bots[botname]["born_setting"])
 
-            # Parse query ID and query
-            query_with_id = query_with_id.split('-', maxsplit=5)
-            query = query_with_id[5]
-            query_id = '-'.join(query_with_id[:5])
+        # Parse query ID and query
+        query_with_id = query_with_id.split('-', maxsplit=5)
+        query = query_with_id[5]
+        query_id = '-'.join(query_with_id[:5])
 
-            if query_id not in stream_reply:
-                bots[botname]["identity"].conversation = conversations
+        if query_id not in stream_reply:
+            bots[botname]["identity"].conversation = conversations
 
-                if reuse and convo_id in conversations:
-                    if bots[botname]["identity"].conversation[convo_id][-1][
-                            'role'] == "assistant":
-                        bots[botname]["identity"].rollback(2, convo_id=convo_id)
-                    else:
-                        bots[botname]["identity"].rollback(1, convo_id=convo_id)
+            if reuse and convo_id in conversations:
+                if bots[botname]["identity"].conversation[convo_id][-1][
+                        'role'] == "assistant":
+                    bots[botname]["identity"].rollback(2, convo_id=convo_id)
+                else:
+                    bots[botname]["identity"].rollback(1, convo_id=convo_id)
 
-                if botname in ['maxwell', 'harrison']:
-                    bots[botname]["identity"].reset(convo_id=convo_id)
+            if botname in ['maxwell', 'harrison']:
+                bots[botname]["identity"].reset(convo_id=convo_id)
 
-                query, display_files = process_syntax(query)
-                stream_reply[query_id] = bots[botname]["identity"].ask_stream(
-                    query, convo_id=convo_id, **bots[botname]["gen_setting"])
+            # Apply timeout to stream creation
+            def create_stream():
+                query_processed, display_files = process_syntax(query)
+                stream = bots[botname]["identity"].ask_stream(
+                    query_processed, convo_id=convo_id, **bots[botname]["gen_setting"])
+                return stream, display_files
 
-                return {"type": 0, "message": display_files + next(stream_reply[query_id])}
-            else:
-                return {"type": 0, "message": next(stream_reply[query_id])}
+            stream, display_files = with_timeout(create_stream, timeout)
+            stream_reply[query_id] = stream
+
+            # Get first message with timeout
+            first_message = with_timeout(next, timeout // 2, stream)
+            return {"type": 0, "message": display_files + first_message}
+        else:
+            # Get next message with timeout
+            next_message = with_timeout(next, timeout // 2, stream_reply[query_id])
+            return {"type": 0, "message": next_message}
+
     except StopIteration:
-        stream_reply.pop(query_id)
+        stream_reply.pop(query_id, None)
         conversations = copy.deepcopy(bots[botname]["identity"].conversation)
         return {"type": 0, "message": None}
     except TimeoutError as e:
         # Clean up on timeout
-        if query_id in stream_reply:
-            stream_reply.pop(query_id)
+        stream_reply.pop(query_id, None)
         return {"type": 1, "message": f"Timeout: {str(e)}"}
     except Exception as e:
+        stream_reply.pop(query_id, None)
         return {"type": 1, "message": f"Exception: {str(e)}\n{traceback.format_exc()}"}
+
 
 port = server.server_address[1]  # Get the port number
 with open("epc_port.txt", "w") as f:

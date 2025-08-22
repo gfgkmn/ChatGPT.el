@@ -513,12 +513,11 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
     (chatgpt-init))
 
   (if recursive
-      (progn
-        (chatgpt-display use-buffer-name)
-        (setq chatgpt-running-flag t))
+      (chatgpt-display use-buffer-name)
 
     (progn
       (setq use-buffer-name (chatgpt-display))
+      (setq chatgpt-running-flag t)
       ;; use-buffer-name sometime create by chatgpt-display which is a buffer
       ;; sometimes is a string?
       (setq chatgpt-last-query query)
@@ -594,6 +593,8 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
      (deferred:error it
                      `(lambda (err)
                         (message "err is:%s" err)
+                        (setq chatgpt-check-running-flag nil)
+                        (setq chatgpt-running-flag nil)
                         (let ((buffer-name-str (if (bufferp use-buffer-name)
                                                    (buffer-name use-buffer-name)
                                                  use-buffer-name)))
@@ -609,9 +610,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                               (chatgpt--goto-identifier ,saved-id ,use-buffer-name))
                             (chatgpt--clear-line)
                             (insert (format "ERROR: %s" (error-message-string err)))
-                            (save-buffer)))
-                        (setq chatgpt-check-running-flag nil)
-                        (setq chatgpt-running-flag nil))))))
+                            (save-buffer))))))))
 
 ;;;###autoload
 (defun chatgpt-clear-cancelled-queries ()
