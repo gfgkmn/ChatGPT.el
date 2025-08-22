@@ -13,16 +13,6 @@ from chatgpt_v3 import Chatbot
 from epc.server import EPCServer
 
 
-def with_timeout(func, timeout_seconds, *args, **kwargs):
-    """Execute function with timeout using threading - works with I/O operations."""
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future = executor.submit(func, *args, **kwargs)
-        try:
-            return future.result(timeout=timeout_seconds)
-        except concurrent.futures.TimeoutError:
-            raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
-
-
 server = EPCServer(('localhost', 0))
 
 # get from $home/.config/chatgptel.json
@@ -238,15 +228,15 @@ def querystream(query_with_id, botname, reuse, convo_id='default', timeout=6):
                     query_processed, convo_id=convo_id, **bots[botname]["gen_setting"])
                 return stream, display_files
 
-            stream, display_files = with_timeout(create_stream, timeout)
+            stream, display_files = create_stream()
             stream_reply[query_id] = stream
 
             # Get first message with timeout
-            first_message = with_timeout(next, timeout // 2, stream)
+            first_message = next(stream)
             return {"type": 0, "message": display_files + first_message}
         else:
             # Get next message with timeout
-            next_message = with_timeout(next, timeout // 2, stream_reply[query_id])
+            next_message = next(stream_reply[query_id])
             return {"type": 0, "message": next_message}
 
     except StopIteration:

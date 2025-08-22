@@ -56,16 +56,6 @@
   :type 'string
   :group 'chatgpt)
 
-(defcustom chatgpt-initial-timeout 20
-  "Timeout in seconds for initial ChatGPT requests."
-  :type 'integer
-  :group 'chatgpt)
-
-(defcustom chatgpt-recursive-timeout 5
-  "Timeout in seconds for recursive ChatGPT requests."
-  :type 'integer
-  :group 'chatgpt)
-
 (defcustom chatgpt-ai-choices
   '("perplexity" "gpt4o" "lispgpt" "pythongpt" "qwen25" "claude" "dsr1")
   "List of AI choices available for selection."
@@ -188,7 +178,7 @@ This function retrieves and displays the port number of the running EPC server."
 
   (epc:stop-epc chatgpt-process)
   (setq chatgpt-process nil)
-  (setq chatgpt-running-flag nil)
+  (setq chatgpt-check-running-flag t)
   (message "Stop ChatGPT process."))
 
 ;;;###autoload
@@ -533,9 +523,7 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                                  (format "%s-%s" (org-id-uuid) query)))
                 (recursive-model use-model)
                 (use-buffer-name use-buffer-name)
-                (reuse (if recursive nil reuse))
-                (timeout-seconds (if recursive chatgpt-recursive-timeout chatgpt-initial-timeout))
-                (timeout-timer nil))
+                (reuse (if recursive nil reuse)))
 
     (if recursive
         (setq next-recursive recursive)
@@ -595,14 +583,14 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
                         (message "err is:%s" err)
                         (setq chatgpt-check-running-flag nil)
                         (setq chatgpt-running-flag nil)
-                        (let ((buffer-name-str (if (bufferp use-buffer-name)
-                                                   (buffer-name use-buffer-name)
-                                                 use-buffer-name)))
-                          (when (<= saved-id
-                                    (or (alist-get buffer-name-str chatgpt-cancelled-thresholds
-                                                   nil nil #'string=)
-                                        0))
-                            (cl-return-from nil)))
+                        ;; (let ((buffer-name-str (if (bufferp use-buffer-name)
+                        ;;                            (buffer-name use-buffer-name)
+                        ;;                          use-buffer-name)))
+                        ;;   (when (<= saved-id
+                        ;;             (or (alist-get buffer-name-str chatgpt-cancelled-thresholds
+                        ;;                            nil nil #'string=)
+                        ;;                 0))
+                        ;;     (cl-return-from nil)))
                         (with-current-buffer ,use-buffer-name
                           (save-excursion
                             (if (numberp next-recursive)
