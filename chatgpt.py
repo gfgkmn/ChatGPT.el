@@ -245,10 +245,12 @@ def querystream(query_with_id, botname, reuse, convo_id='default', timeout=6):
         return {"type": 0, "message": None}
     except TimeoutError as e:
         # Clean up on timeout
-        stream_reply.pop(query_id, None)
+        if query_id in stream_reply:
+            stream_reply.pop(query_id, None)
         return {"type": 1, "message": f"Timeout: {str(e)}"}
     except Exception as e:
-        stream_reply.pop(query_id, None)
+        if query_id in stream_reply:
+            stream_reply.pop(query_id, None)
         return {"type": 1, "message": f"Exception: {str(e)}\n{traceback.format_exc()}"}
 
 

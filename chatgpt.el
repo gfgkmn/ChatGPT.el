@@ -503,11 +503,12 @@ QUERY-TYPE is \"doc\", the final query sent to ChatGPT would be
     (chatgpt-init))
 
   (if recursive
-      (chatgpt-display use-buffer-name)
+      (progn
+        (chatgpt-display use-buffer-name)
+        (setq chatgpt-running-flag t))
 
     (progn
       (setq use-buffer-name (chatgpt-display))
-      (setq chatgpt-running-flag t)
       ;; use-buffer-name sometime create by chatgpt-display which is a buffer
       ;; sometimes is a string?
       (setq chatgpt-last-query query)
